@@ -1,13 +1,11 @@
 import os
+import numpy as np
 
 ##################  VARIABLES  ##################
-# DATA_SIZE = "1k" # ["1k", "200k", "all"]
-# CHUNK_SIZE = 200
-# GCP_PROJECT = ""
-# GCP_PROJECT_CERES = ""
-# BQ_DATASET = "taxifare"
-# BQ_REGION = "EU"
-# MODEL_TARGET = "local"
+GCP_PROJECT = os.environ.get("GCP_PROJECT")
+GCP_REGION = os.environ.get("GCP_REGION")
+BUCKET_NAME = os.environ.get("BUCKET_NAME")
+
 
 
 ##################  CONSTANTS  #####################
