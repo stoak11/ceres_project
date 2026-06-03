@@ -1,3 +1,5 @@
+dotenv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -77,6 +79,7 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 .ipynb
+notebooks/*
 
 # IPython
 profile_default/
@@ -129,6 +132,11 @@ dmypy.json
 .DS_Store
 
 # Project Dir
-raw_data/*
+agrestesaa/*
+meteofrance/*
+nvdi/*
+open_meteo/*
+rgp/*
+soil_grid/*
 *.csv
 **/*.csv
