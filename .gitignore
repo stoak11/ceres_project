@@ -132,11 +132,13 @@ dmypy.json
 .DS_Store
 
 # Project Dir
-agrestesaa/*
-meteofrance/*
-nvdi/*
-open_meteo/*
-rgp/*
-soil_grid/*
+raw_data/agrestesaa/*
+raw_data/meteofrance/*
+raw_data/nvdi/*
+raw_data/open_meteo/*
+raw_data/rgp/*
+raw_data/soil_grid/*
 *.csv
 **/*.csv
+
+!**/*.gitkeep
