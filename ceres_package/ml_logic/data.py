@@ -9,13 +9,21 @@ from ceres_package.params import *
 from ceres_package.utils import simple_time_and_memory_tracker
 
 
-@simple_time_and_memory_tracker
-def clean_meteo_data(gcp_path) -> pd.DataFrame:
+def meteofull_from_gcp():
+    local_path = ['raw_data', 'meteofrance','france', 'meteofrance_full.csv']
 
-    dept_id = re.search(r'dept_(\w+)\.csv', gcp_path).group(1)
+    download_blob(source_blob_name='meteo_france_data/france/meteofrance_full.csv', destination_file_name=local_path)
+
+    df = pd.read_excel(Path(*local_path), sheet_name='COP')
+
+
+
+@simple_time_and_memory_tracker
+def clean_meteo_data(file_path) -> pd.DataFrame:
+    dept_id = re.search(r'dept_(\w+)\.csv', file_path).group(1)
     chunks_agg = []
     """ Loop over one CSV """
-    for chunk in pd.read_csv(gcp_path, chunksize=50_000, sep=',', encoding='utf-8-sig'):
+    for chunk in pd.read_csv(file_path, chunksize=50_000, sep=',', encoding='utf-8-sig'):
 
         """ Drop useless columns """
         cols_to_drop = [c for c in chunk.columns if c not in COLONNES_BLE]
@@ -27,6 +35,7 @@ def clean_meteo_data(gcp_path) -> pd.DataFrame:
 
         """ Rename columns with self-explanatory names """
         chunk = chunk.rename(columns=RENAME_COLONNES_BLE)
+
         """ Add cleaned chunks to chunks list and delete current chunk from RAM """
         chunks_agg.append(chunk)
         del chunk
@@ -49,20 +58,22 @@ def clean_meteo_data(gcp_path) -> pd.DataFrame:
     return df_agg
 
 @simple_time_and_memory_tracker
-def consolidate_meteo_data(gcp_path, consolidated_file):
-    """ In Case of future update to consolidated all updated departments CSV """
+def consolidate_meteo_data():
+    """ Consolidate all departments CSV into one file """
+    BASE_DIR = os.path.dirname(os.path.dirname(__file__))
     first_write = True
+    consolidation_file = os.path.join(BASE_DIR, 'raw_data', 'meteofrance', 'france', 'meteofrance_full.csv')
 
-    for dept in range(21, 96):
-        dept_str = f'{dept:02d}'
-        gcp_path = f'/home/berlh/code/stoak11/ceres_project/raw_data/meteofrance/departements/dept_{dept_str}.csv'
-        df_temp = clean_meteo_data(gcp_path=gcp_path)
-        df_temp.to_csv(consolidated_file, mode='a', index=False, header = first_write)
+    for dept in DEPARTEMENTS_ID:
+        file_path = os.path.join(BASE_DIR, 'raw_data', 'meteofrance', 'departements', f'dept_{dept}.csv')
+        df_temp = clean_meteo_data(file_path=file_path)
+        df_temp.to_csv(consolidation_file, mode='a', index=False, header=first_write)
         first_write = False
-        print(f'✅ Département {dept_str} consolidated to full file')
+        print(f'✅ Département {dept} consolidated to full file')
         del df_temp
 
-    print(f'\n✅ Terminé — {consolidated_file}')
+    print(f'\n✅ Terminé — {consolidation_file}')
+
 def download_blob(source_blob_name, destination_file_name):
     """Downloads a blob from the bucket."""
     # The ID of your GCS object
@@ -127,7 +138,7 @@ def clean_production_data():
     # ------------------------------------------------------------------
     local_path = ['raw_data', 'agrestesaa','SAA_2010-2025_provisoires_donnees_departementales.xlsx']
 
-    blob = download_blob(source_blob_name='SAA-prod-ble/RAW_Data/SAA_2010-2025_provisoires_donnees_departementales.xlsx', destination_file_name=local_path)
+    download_blob(source_blob_name='SAA-prod-ble/RAW_Data/SAA_2010-2025_provisoires_donnees_departementales.xlsx', destination_file_name=local_path)
 
     df = pd.read_excel(Path(*local_path), sheet_name='COP')
 
@@ -247,8 +258,6 @@ def clean_production_data():
 
     return target_ble_hiver
 
-def clean_meteo_data(df : pd.DataFrame) -> pd.DataFrame :
-    pass
 
 if __name__ == '__main__':
     clean_production_data()
