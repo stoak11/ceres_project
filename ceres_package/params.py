@@ -60,6 +60,13 @@ METEO_DTYPES = {
     'hauteur_neige_sol_cm': 'float32',
     'rayonnement_global_jcm2': 'float32',
     'insolation_min': 'float32',
+    'temp_min_sol_10cm_c': 'float32',
+    'heure_humidite_min': 'float32',
+    'heure_humidite_max': 'float32',
+    'direction_vent_deg': 'float32',
+    'hauteur_neige_sol_cm': 'float32',
+    'etat_sol': 'float32',
+    'duree_humectation_foliaire_min': 'float32',
     'dept_id': 'int32',
 }
 
@@ -80,7 +87,10 @@ DATA_CONFIG: dict[str, dict] = {
             'humidite_relative_pct', 'humidite_min_pct', 'humidite_max_pct',
             'vent_moyen_10m_ms', 'rafale_max_ms', 'tension_vapeur_hpa',
             'pression_mer_hpa', 'temp_sol_10cm_c', 'temp_sol_20cm_c',
-            'temp_sol_50cm_c', 'temp_sol_100cm_c', 'temp_surface_sol_c'
+            'temp_sol_50cm_c', 'temp_sol_100cm_c', 'temp_surface_sol_c',
+            'temp_min_sol_10cm_c', 'heure_humidite_min', 'heure_humidite_max',
+            'direction_vent_deg', 'hauteur_neige_sol_cm', 'etat_sol',
+            'duree_humectation_foliaire_min'
             ],
         'sum': [
             'precipitations_1h_mm', 'duree_precipitations_min',
