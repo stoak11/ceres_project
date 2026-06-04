@@ -42,21 +42,21 @@ def load_from_gcp(source: DATA_SOURCE, dept: str | None = None) -> pd.DataFrame:
                 if dtype:
                     chunk = chunk.astype({col: t for col, t in dtype.items() if col in chunk.columns})
                 chunk['datetime'] = pd.to_datetime(chunk['datetime'])
-                chunk['month'] = chunk['datetime'].dt.to_period('M')
+                chunk['day'] = chunk['datetime'].dt.to_period('D')
 
                 if agg_config:
-                    agg = chunk.groupby(['dept_id', 'month']).agg(
+                    agg = chunk.groupby(['dept_id', 'day']).agg(
                         **{col: (col, 'mean') for col in agg_config.get('mean', []) if col in chunk.columns},
                         **{col: (col, 'sum')  for col in agg_config.get('sum',  []) if col in chunk.columns})
                 else:
-                    agg = chunk.groupby(['dept_id', 'month']).mean(numeric_only=True)
+                    agg = chunk.groupby(['dept_id', 'day']).mean(numeric_only=True)
 
                 chunks.append(agg)
 
-            df = pd.concat(chunks).groupby(['dept_id', 'month']).agg(
+            df = pd.concat(chunks).groupby(['dept_id', 'day']).agg(
                 **{col: (col, 'mean') for col in agg_config.get('mean', []) if col in chunks[0].columns},
                 **{col: (col, 'sum')  for col in agg_config.get('sum',  []) if col in chunks[0].columns},
-            ) if agg_config else pd.concat(chunks).groupby(['dept_id', 'month']).mean()
+            ) if agg_config else pd.concat(chunks).groupby(['dept_id', 'day']).mean()
 
     return df
 
