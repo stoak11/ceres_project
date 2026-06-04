@@ -1,20 +1,10 @@
-import numpy as np
+import os
 import pandas as pd
-import pandas as pd
-import matplotlib as plt
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.linear_model import Ridge
-from sklearn.preprocessing import FunctionTransformer
-from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_squared_error, r2_score
-from sklearn.metrics import mean_absolute_error
 from xgboost import XGBRegressor
-from sklearn.model_selection import RandomizedSearchCV
-from scipy.stats import uniform, randint
-from sklearn.linear_model import Lasso, ElasticNet, BayesianRidge
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
 
 
 def train_test_split_data(merged_df):
@@ -23,21 +13,91 @@ def train_test_split_data(merged_df):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
     return X_train, X_test, y_train, y_test
 
-# ── shared preprocessing + model slot ───────────────────────────────────────
-def make_pipe(estimator) -> Pipeline:
-    return Pipeline([
+
+def prepare_data(df, target_column="RENDEMENT", test_size=0.2, random_state=42):
+    """
+    Nettoie le DataFrame des valeurs nulles sur la cible, sépare les features (X)
+    de la target (y) et sépare le jeu en train/test.
+    """
+    print("⏳ Préparation et nettoyage des données...")
+
+    # 1. Suppression des lignes où la cible est vide
+    df_clean = df.dropna(subset=[target_column]).copy()
+
+    # 2. Séparation X et y (on retire la cible et les colonnes d'identifiants/temporelles)
+    # Ajustez cette liste selon les noms exacts de vos colonnes à exclure du training
+    columns_to_drop = [target_column, "REGION", "TYPE BLE", "SURFACE", "PRODUCTION", "dept_nom", "DEPT_x",
+                       "DEPT_y", "ANNEE", "DEPT_ID"]
+    columns_to_drop = [col for col in columns_to_drop if col in df_clean.columns]
+
+    X = df_clean.drop(columns=columns_to_drop)
+    y = df_clean[target_column]
+
+    # 3. Split Train / Test
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state
+    )
+
+    print(f"✅ Données prêtes ! Train: {X_train.shape[0]} lignes | Test: {X_test.shape[0]} lignes")
+    return X_train, X_test, y_train, y_test
+
+
+def train_model(X_train, y_train, param_grid=None, n_iter=50, cv=5, random_state=42):
+    """
+    Initialise le Pipeline (Scaler + XGBoost) et lance la recherche d'hyperparamètres.
+    """
+    print("🚀 Initialisation du Pipeline et du RandomizedSearchCV...")
+
+    # 1. Définition du pipeline (uniquement scaling et modèle)
+    pipe = Pipeline([
         ("scaler", MinMaxScaler()),
-        ("model", estimator),
+        ("model", XGBRegressor(random_state=random_state))
     ])
 
-def randomized_grid_search(model, param_grid, X_train, y_train, n_iter=100, cv=5, scoring="neg_root_mean_squared_error"):
+    # 2. Grille de paramètres par défaut si aucune n'est fournie
+    if param_grid is None:
+        param_grid = {
+            "model__n_estimators": [50, 100, 200],
+            "model__max_depth": [3, 5, 7],
+            "model__learning_rate": [0.01, 0.1, 0.2],
+            "model__subsample": [0.8, 1.0]
+        }
+
+    # 3. Configuration du Search (Optimisation sur le R²)
     search = RandomizedSearchCV(
-        model=model,
-        param_grid=param_grid,
+        pipe,
+        param_distributions=param_grid,
         n_iter=n_iter,
         cv=cv,
-        scoring=scoring,
+        scoring='r2',
         n_jobs=-1,
+        random_state=random_state,
+        verbose=1
     )
+
+    print(f"🏋️‍♂️ Entraînement en cours ({n_iter} combinaisons, CV={cv})...")
     search.fit(X_train, y_train)
-    return search, search.best_estimator_, search.best_params_, search.cv_results_
+
+    print(f"🏆 Meilleur score R² trouvé en CV : {search.best_score_:.4f}")
+    return search.best_estimator_
+
+
+def evaluate_and_predict(model, X_test, y_test):
+    """
+    Évalue le modèle entraîné sur le jeu de test et affiche les métriques de performance.
+    """
+    print("📊 Évaluation du modèle sur le jeu de test...")
+
+    # Prédictions
+    predictions = model.predict(X_test)
+
+    # Calcul des métriques
+    r2 = r2_score(y_test, predictions)
+    rmse = mean_squared_error(y_test, predictions)
+    mae = mean_absolute_error(y_test, predictions)
+
+    print(f"🎯 --- RÉSULTATS ---")
+    print(f"   Score R² : {r2:.4f}")
+    print(f"---------------------")
+
+    return predictions
