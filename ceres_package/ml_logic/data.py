@@ -15,8 +15,8 @@ from pathlib import Path
 
 
 def load_from_gcp(source: DATA_SOURCE, dept: str | None = None) -> pd.DataFrame:
-    if source not in DATA_SOURCE:
-        raise ValueError(f"Source inconnue : '{source}'. Valeurs possibles : {list(DATA_SOURCE)}")
+    if source not in DATA_CONFIG:
+        raise ValueError(f"Source inconnue : '{source}'. Valeurs possibles : {list(DATA_CONFIG)}")
 
     config = DATA_CONFIG[source].copy()
 
@@ -24,14 +24,45 @@ def load_from_gcp(source: DATA_SOURCE, dept: str | None = None) -> pd.DataFrame:
         if dept is None:
             raise ValueError("L'argument 'dept' est requis pour la source 'meteo_dept'")
         config['blob'] = config['blob'].format(dept=dept)
-        config['local'] = [s.format(dept=dept) for s in config['local']]
+        config['local'] = Path(config['local'].format(dept=dept))
 
     if source == 'meteo_dept':
         download_blob(source_blob_name=config['blob'], destination_file_name=config['local'])
-        df = clean_meteo_data(Path(*config['local']))
+        df = clean_meteo_data(config['local'])
     else :
         download_blob(source_blob_name=config['blob'], destination_file_name=config['local'])
-        df = pd.read_csv(Path(*config['local']))
+        read_options = config.get('read_options', {}).copy()
+        chunksize = read_options.pop('chunksize', None)
+        dtype = read_options.pop('dtype', None)
+
+        if chunksize:
+            agg_config = config.get('agg_config', None)
+            chunks = []
+            for chunk in pd.read_csv(config['local'], chunksize=chunksize, **read_options):
+                chunk = chunk[pd.to_numeric(chunk['altitude_m'], errors='coerce').notna()]
+                if dtype:
+                    chunk = chunk.astype({col: t for col, t in dtype.items() if col in chunk.columns})
+                chunk['datetime'] = pd.to_datetime(chunk['datetime'])
+                chunk['day'] = chunk['datetime'].dt.to_period('D')
+
+                if agg_config:
+                    agg = chunk.groupby(['dept_id', 'day']).agg(
+                        **{col: (col, 'mean') for col in agg_config.get('mean', []) if col in chunk.columns},
+                        **{col: (col, 'sum')  for col in agg_config.get('sum',  []) if col in chunk.columns})
+                else:
+                    agg = chunk.groupby(['dept_id', 'day']).mean(numeric_only=True)
+
+                chunks.append(agg)
+
+            df = pd.concat(chunks).groupby(['dept_id', 'day']).agg(
+                **{col: (col, 'mean') for col in agg_config.get('mean', []) if col in chunks[0].columns},
+                **{col: (col, 'sum')  for col in agg_config.get('sum',  []) if col in chunks[0].columns},
+            ) if agg_config else pd.concat(chunks).groupby(['dept_id', 'day']).mean()
+            df = df.reset_index()  # ✅
+        else:
+            df = pd.read_csv(config['local'], **read_options)
+            if dtype:
+                df = df.astype({col: t for col, t in dtype.items() if col in df.columns})
 
     return df
 
@@ -103,7 +134,8 @@ def download_blob(source_blob_name, destination_file_name):
 
     bucket = storage_client.bucket(BUCKET_NAME)
 
-    destination_file_name_path = Path(*destination_file_name)
+    destination_file_name_path = Path(destination_file_name)
+
 
     # Construct a client side representation of a blob.
     # Note `Bucket.blob` differs from `Bucket.get_blob` as it doesn't retrieve
@@ -120,7 +152,7 @@ def download_blob(source_blob_name, destination_file_name):
     else:
         print(
             "Storage object {} from bucket {} to local file {} already downloaded.".format(
-                source_blob_name, BUCKET_NAME, '/'.join(destination_file_name))
+                source_blob_name, BUCKET_NAME, destination_file_name)
             )
 
 def clean_production_data():
@@ -153,11 +185,11 @@ def clean_production_data():
     # ------------------------------------------------------------------
     # Chargement des données
     # ------------------------------------------------------------------
-    local_path = ['raw_data', 'agrestesaa','SAA_2010-2025_provisoires_donnees_departementales.xlsx']
+    local_path = ROOT / 'raw_data' / 'agrestesaa' / 'SAA_2010-2025_provisoires_donnees_departementales.xlsx'
 
     download_blob(source_blob_name='SAA-prod-ble/RAW_Data/SAA_2010-2025_provisoires_donnees_departementales.xlsx', destination_file_name=local_path)
 
-    df = pd.read_excel(Path(*local_path), sheet_name='COP')
+    df = pd.read_excel(local_path, sheet_name='COP')
 
     # ------------------------------------------------------------------
     # Nettoyage de la structure du fichier Excel
@@ -207,7 +239,7 @@ def clean_production_data():
 
     df["LIB_DEP"] = df["LIB_DEP"].str.slice(4)
 
-    df = df.rename(columns={"LIB_DEP": "REGION"})
+    df = df.rename(columns={"LIB_DEP": "DEPT"})
     df = df.rename(columns={"LIB_SAA": "TYPE BLE"})
 
     # ------------------------------------------------------------------
@@ -217,7 +249,7 @@ def clean_production_data():
     # Rendement
     df_rend = pd.melt(
         df,
-        id_vars=["DEPT_ID", "REGION", "TYPE BLE", "STATUT_QUALITE"],
+        id_vars=["DEPT_ID", "DEPT", "TYPE BLE", "STATUT_QUALITE"],
         value_vars=[col for col in df.columns if col.startswith("REND_")],
         var_name="ANNEE",
         value_name="RENDEMENT",
@@ -228,7 +260,7 @@ def clean_production_data():
     # Surface
     df_surf = pd.melt(
         df,
-        id_vars=["DEPT_ID", "REGION", "TYPE BLE", "STATUT_QUALITE"],
+        id_vars=["DEPT_ID", "DEPT", "TYPE BLE", "STATUT_QUALITE"],
         value_vars=[col for col in df.columns if col.startswith("SURF_")],
         var_name="ANNEE",
         value_name="SURFACE",
@@ -239,7 +271,7 @@ def clean_production_data():
     # Production
     df_prod = pd.melt(
         df,
-        id_vars=["DEPT_ID", "REGION", "TYPE BLE", "STATUT_QUALITE"],
+        id_vars=["DEPT_ID", "DEPT", "TYPE BLE", "STATUT_QUALITE"],
         value_vars=[col for col in df.columns if col.startswith("PROD_")],
         var_name="ANNEE",
         value_name="PRODUCTION",
@@ -255,7 +287,7 @@ def clean_production_data():
         df_prod,
         on=[
             "DEPT_ID",
-            "REGION",
+            "DEPT",
             "TYPE BLE",
             "STATUT_QUALITE",
             "ANNEE",
@@ -266,7 +298,7 @@ def clean_production_data():
         df_rend,
         on=[
             "DEPT_ID",
-            "REGION",
+            "DEPT",
             "TYPE BLE",
             "STATUT_QUALITE",
             "ANNEE",

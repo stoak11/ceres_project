@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from typing import Literal
+from pathlib import Path
 
 ##################  VARIABLES  ##################
 GCP_PROJECT = os.environ.get("GCP_PROJECT")
@@ -23,6 +24,8 @@ GCS_MODEL_PREFIX = os.environ.get("GCS_MODEL_PREFIX", "models/registry")
 
 
 ##################  SOURCE  #####################
+ROOT = Path(__file__).resolve().parents[1]
+
 
 DATA_SOURCE = Literal[
     'production',
@@ -31,34 +34,97 @@ DATA_SOURCE = Literal[
     'soil',
     'ndvi_season',
     'ndvi_month',
-]
+    ]
+
+METEO_DTYPES = {
+    'altitude_m': 'float32',
+    'precipitations_1h_mm': 'float32',
+    'duree_precipitations_min': 'float32',
+    'vent_moyen_10m_ms': 'float32',
+    'direction_vent_deg': 'float32',
+    'rafale_max_ms': 'float32',
+    'temp_air_c': 'float32',
+    'temp_rosee_c': 'float32',
+    'temp_min_c': 'float32',
+    'temp_max_c': 'float32',
+    'duree_gel_min': 'float32',
+    'temp_sol_10cm_c': 'float32',
+    'temp_sol_20cm_c': 'float32',
+    'temp_sol_50cm_c': 'float32',
+    'temp_sol_100cm_c': 'float32',
+    'temp_min_sol_10cm_c': 'float32',
+    'temp_surface_sol_c': 'float32',
+    'duree_humectation_foliaire_min': 'float32',
+    'humidite_relative_pct': 'float32',
+    'humidite_min_pct': 'float32',
+    'heure_humidite_min': 'float32',
+    'humidite_max_pct': 'float32',
+    'heure_humidite_max': 'float32',
+    'duree_humidite_inf40_min': 'float32',
+    'duree_humidite_sup80_min': 'float32',
+    'tension_vapeur_hpa': 'float32',
+    'pression_mer_hpa': 'float32',
+    'etat_sol': 'float32',
+    'hauteur_neige_sol_cm': 'float32',
+    'rayonnement_global_jcm2': 'float32',
+    'insolation_min': 'float32',
+    'temp_min_sol_10cm_c': 'float32',
+    'heure_humidite_min': 'float32',
+    'heure_humidite_max': 'float32',
+    'direction_vent_deg': 'float32',
+    'hauteur_neige_sol_cm': 'float32',
+    'etat_sol': 'float32',
+    'duree_humectation_foliaire_min': 'float32',
+    'dept_id': 'int32',
+}
 
 DATA_CONFIG: dict[str, dict] = {
     'production': {
         'blob': 'SAA-prod-ble/Clean_Data/target_ble_tendre_hiver.csv',
-        'local': ['raw_data', 'agrestesaa', 'clean_wheat_prod.csv'],
-    },
+        'local': ROOT / 'raw_data' / 'agrestesaa' / 'clean_wheat_prod.csv',
+        },
     'meteo_full': {
         'blob': 'meteo_france_data/france/meteofrance_full.csv',
-        'local': ['raw_data', 'meteofrance', 'france', 'meteofrance_full.csv'],
-    },
+        'local': ROOT / 'raw_data' / 'meteofrance' / 'france' / 'meteofrance_full.csv',
+        'read_options': {
+        'dtype': METEO_DTYPES,
+        'chunksize': 50_000,
+        'low_memory': False},
+        'agg_config': {
+        'mean': [
+            'temp_air_c', 'temp_min_c', 'temp_max_c', 'temp_rosee_c',
+            'humidite_relative_pct', 'humidite_min_pct', 'humidite_max_pct',
+            'vent_moyen_10m_ms', 'rafale_max_ms', 'tension_vapeur_hpa',
+            'pression_mer_hpa', 'temp_sol_10cm_c', 'temp_sol_20cm_c',
+            'temp_sol_50cm_c', 'temp_sol_100cm_c', 'temp_surface_sol_c',
+            'temp_min_sol_10cm_c', 'heure_humidite_min', 'heure_humidite_max',
+            'direction_vent_deg', 'hauteur_neige_sol_cm', 'etat_sol',
+            'duree_humectation_foliaire_min'
+            ],
+        'sum': [
+            'precipitations_1h_mm', 'duree_precipitations_min',
+            'duree_gel_min', 'insolation_min', 'rayonnement_global_jcm2',
+            'duree_humidite_inf40_min', 'duree_humidite_sup80_min'
+            ],
+            }
+        },
     'meteo_dept': {
         'blob': 'meteo_france_data/departements/dept_{dept}.csv',
-        'local': ['raw_data', 'meteofrance', 'france', 'dept_{dept}.csv'],
-    },
+        'local': str(ROOT / 'raw_data' / 'meteofrance' / 'departements' / 'dept_{dept}.csv'),
+        },
     'soil': {
         'blob': 'propriétés de sol/soilgrids.csv',
-        'local': ['raw_data', 'soil_grid', 'soil_grids.csv'],
-    },
+        'local': ROOT / 'raw_data' / 'soil_grid' / 'soil_grids.csv',
+        },
     'ndvi_season': {
         'blob': 'NDVI/ndvi_season_features.csv',
-        'local': ['raw_data', 'ndvi', 'ndvi_season.csv'],
-    },
+        'local': ROOT / 'raw_data' / 'ndvi' / 'ndvi_season.csv',
+        },
     'ndvi_month': {
         'blob': 'NDVI/ndvi_monthly_by_department_polygon.csv',
-        'local': ['raw_data', 'ndvi', 'ndvi_monthly.csv'],
-    },
-}
+        'local': ROOT / 'raw_data' / 'ndvi' / 'ndvi_monthly.csv',
+        },
+    }
 #################  Departements  ####################
 DEPARTEMENTS = {
             '01': 'Ain',
@@ -170,6 +236,7 @@ DEPARTEMENTS_ID = [
     "90","91","92","93","94","95"]
 
 ##############  DATA METEO FRANCE  ##################
+
 COLONNES_BLE = [
         # Identifiants & localisation
         "NUM_POSTE","LAT", "LON", "ALTI", "AAAAMMJJHH",

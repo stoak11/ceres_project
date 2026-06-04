@@ -10,3 +10,5 @@ matplotlib
 seaborn
 scikit-learn
 joblib
+xgboost
+scipy
