@@ -15,8 +15,8 @@ from pathlib import Path
 
 
 def load_from_gcp(source: DATA_SOURCE, dept: str | None = None) -> pd.DataFrame:
-    if source not in DATA_SOURCE:
-        raise ValueError(f"Source inconnue : '{source}'. Valeurs possibles : {list(DATA_SOURCE)}")
+    if source not in DATA_CONFIG:
+        raise ValueError(f"Source inconnue : '{source}'. Valeurs possibles : {list(DATA_CONFIG)}")
 
     config = DATA_CONFIG[source].copy()
 
