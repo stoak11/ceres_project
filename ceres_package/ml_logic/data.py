@@ -1,15 +1,95 @@
 from pathlib import Path
+from typing import Literal
 
 from google.cloud import storage
+
 import pandas as pd
-import matplotlib.pyplot as plt
+import re
 
 from ceres_package.params import *
 from ceres_package.utils import simple_time_and_memory_tracker
 
 
-@simple_time_and_memory_tracker
+from typing import Literal
+from pathlib import Path
 
+
+def load_from_gcp(source: DATA_SOURCE, dept: str | None = None) -> pd.DataFrame:
+    if source not in DATA_SOURCE:
+        raise ValueError(f"Source inconnue : '{source}'. Valeurs possibles : {list(DATA_SOURCE)}")
+
+    config = DATA_CONFIG[source].copy()
+
+    if source == 'meteo_dept':
+        if dept is None:
+            raise ValueError("L'argument 'dept' est requis pour la source 'meteo_dept'")
+        config['blob'] = config['blob'].format(dept=dept)
+        config['local'] = [s.format(dept=dept) for s in config['local']]
+
+    if source == 'meteo_dept':
+        download_blob(source_blob_name=config['blob'], destination_file_name=config['local'])
+        df = clean_meteo_data(Path(*config['local']))
+    else :
+        download_blob(source_blob_name=config['blob'], destination_file_name=config['local'])
+        df = pd.read_csv(Path(*config['local']))
+
+    return df
+
+@simple_time_and_memory_tracker
+def clean_meteo_data(file_path) -> pd.DataFrame:
+    dept_id = re.search(r'dept_(\w+)\.csv', file_path).group(1)
+    chunks_agg = []
+    """ Loop over one CSV """
+    for chunk in pd.read_csv(file_path, chunksize=50_000, sep=',', encoding='utf-8-sig'):
+
+        """ Drop useless columns """
+        cols_to_drop = [c for c in chunk.columns if c not in COLONNES_BLE]
+        chunk = chunk.drop(columns=cols_to_drop)
+
+        """ Convert Météo France timestamps """
+        chunk["DATE"] = pd.to_datetime(chunk["AAAAMMJJHH"].astype(str), format="%Y%m%d%H")
+        chunk = chunk.drop(columns=["AAAAMMJJHH"])
+
+        """ Rename columns with self-explanatory names """
+        chunk = chunk.rename(columns=RENAME_COLONNES_BLE)
+
+        """ Add cleaned chunks to chunks list and delete current chunk from RAM """
+        chunks_agg.append(chunk)
+        del chunk
+
+    """ Concat cleaned chunks list and delete current chunks list from RAM """
+    df_dept = pd.concat(chunks_agg, ignore_index=True)
+    del chunks_agg
+
+    """ Colonnes de mesure (hors identifiants station) """
+    mesure_cols = [c for c in df_dept.columns if c not in ["id_station", "latitude", "longitude", "datetime"]]
+
+    """" Aggregation by timestamp and delete pre-aggregation DataFrame from RAM """
+    df_agg = df_dept.groupby("datetime")[mesure_cols].mean(numeric_only=True).reset_index()
+    del df_dept
+
+    """ Add column ['dept_id'] """
+    df_agg["dept_id"] = dept_id
+
+    print(f'✅ Département {dept_id} cleaned — {len(df_agg):,} lignes')
+    return df_agg
+
+@simple_time_and_memory_tracker
+def consolidate_meteo_data():
+    """ Consolidate all departments CSV into one file """
+    BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+    first_write = True
+    consolidation_file = os.path.join(BASE_DIR, 'raw_data', 'meteofrance', 'france', 'meteofrance_full.csv')
+
+    for dept in DEPARTEMENTS_ID:
+        file_path = os.path.join(BASE_DIR, 'raw_data', 'meteofrance', 'departements', f'dept_{dept}.csv')
+        df_temp = clean_meteo_data(file_path=file_path)
+        df_temp.to_csv(consolidation_file, mode='a', index=False, header=first_write)
+        first_write = False
+        print(f'✅ Département {dept} consolidated to full file')
+        del df_temp
+
+    print(f'\n✅ Terminé — {consolidation_file}')
 
 def download_blob(source_blob_name, destination_file_name):
     """Downloads a blob from the bucket."""
@@ -75,7 +155,7 @@ def clean_production_data():
     # ------------------------------------------------------------------
     local_path = ['raw_data', 'agrestesaa','SAA_2010-2025_provisoires_donnees_departementales.xlsx']
 
-    blob = download_blob(source_blob_name='SAA-prod-ble/RAW_Data/SAA_2010-2025_provisoires_donnees_departementales.xlsx', destination_file_name=local_path)
+    download_blob(source_blob_name='SAA-prod-ble/RAW_Data/SAA_2010-2025_provisoires_donnees_departementales.xlsx', destination_file_name=local_path)
 
     df = pd.read_excel(Path(*local_path), sheet_name='COP')
 
@@ -195,8 +275,6 @@ def clean_production_data():
 
     return target_ble_hiver
 
-def clean_meteo_data(df : pd.DataFrame) -> pd.DataFrame :
-    pass
 
 if __name__ == '__main__':
     clean_production_data()

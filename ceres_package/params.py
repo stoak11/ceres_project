@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from typing import Literal
 
 ##################  VARIABLES  ##################
 GCP_PROJECT = os.environ.get("GCP_PROJECT")
@@ -13,7 +14,42 @@ BUCKET_NAME = os.environ.get("BUCKET_NAME")
 # LOCAL_REGISTRY_PATH =  os.path.join(os.path.expanduser('~'), ".lewagon", "mlops", "training_outputs")
 
 
+##################  SOURCE  #####################
 
+DATA_SOURCE = Literal[
+    'production',
+    'meteo_full',
+    'meteo_dept',
+    'soil',
+    'ndvi_season',
+    'ndvi_month',
+]
+
+DATA_CONFIG: dict[str, dict] = {
+    'production': {
+        'blob': 'SAA-prod-ble/Clean_Data/target_ble_tendre_hiver.csv',
+        'local': ['raw_data', 'agrestesaa', 'clean_wheat_prod.csv'],
+    },
+    'meteo_full': {
+        'blob': 'meteo_france_data/france/meteofrance_full.csv',
+        'local': ['raw_data', 'meteofrance', 'france', 'meteofrance_full.csv'],
+    },
+    'meteo_dept': {
+        'blob': 'meteo_france_data/departements/dept_{dept}.csv',
+        'local': ['raw_data', 'meteofrance', 'france', 'dept_{dept}.csv'],
+    },
+    'soil': {
+        'blob': 'propriétés de sol/soilgrids.csv',
+        'local': ['raw_data', 'soil_grid', 'soil_grids.csv'],
+    },
+    'ndvi_season': {
+        'blob': 'NDVI/ndvi_season_features.csv',
+        'local': ['raw_data', 'ndvi', 'ndvi_season.csv'],
+    },
+    'ndvi_month': {
+        'blob': 'NDVI/ndvi_monthly_by_department_polygon.csv',
+        'local': ['raw_data', 'ndvi', 'ndvi_monthly.csv']}
+    }
 #################  Departements  ####################
 DEPARTEMENTS = {
             '01': 'Ain',
@@ -112,6 +148,17 @@ DEPARTEMENTS = {
             '94': 'Val-de-Marne',
             '95': "Val-d'Oise",
             }
+DEPARTEMENTS_ID = [
+    "01","02","03","04","05","06","07","08","09","10",
+    "11","12","13","14","15","16","17","18","19","21",
+    "22","23","24","25","26","27","28","29",
+    "30","31","32","33","34","35","36","37","38","39",
+    "40","41","42","43","44","45","46","47","48","49",
+    "50","51","52","53","54","55","56","57","58","59",
+    "60","61","62","63","64","65","66","67","68","69",
+    "70","71","72","73","74","75","76","77","78","79",
+    "80","81","82","83","84","85","86","87","88","89",
+    "90","91","92","93","94","95"]
 
 ##############  DATA METEO FRANCE  ##################
 COLONNES_BLE = [
