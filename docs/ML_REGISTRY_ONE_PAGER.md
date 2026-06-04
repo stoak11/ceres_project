@@ -69,7 +69,7 @@ The registry does **not** build features — only trains on the mart you provide
 **You choose the temporal split** (no hidden default in code).
 
 ```bash
-export LOCAL_REGISTRY_PATH=models/registry   # default; use a sandbox path to experiment
+export LOCAL_REGISTRY_PATH=models/registry   # set before launching Python; use a sandbox to experiment
 
 PYTHONPATH=. python scripts/ml/train_and_register.py \
   --mart data/marts/my_fe_v3.parquet \

@@ -6,6 +6,7 @@ Scoring lives in predict.py. GCS upload is explicit (upload_run_to_gcs).
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import time
 from dataclasses import asdict, dataclass, field
@@ -16,12 +17,7 @@ import joblib
 from sklearn.pipeline import Pipeline
 
 from ceres_package.ml_logic.model_specs import get_model_spec
-from ceres_package.params import (
-    BUCKET_NAME,
-    GCP_PROJECT,
-    GCS_MODEL_PREFIX,
-    LOCAL_REGISTRY_PATH,
-)
+from ceres_package.params import BUCKET_NAME, GCP_PROJECT, GCS_MODEL_PREFIX, PROJECT_ROOT
 
 MANIFEST_NAME = "manifest.json"
 PIPELINE_NAME = "pipeline.joblib"
@@ -61,7 +57,9 @@ class LoadedRun:
 
 
 def registry_root() -> Path:
-    root = Path(LOCAL_REGISTRY_PATH)
+    """Resolve registry dir from LOCAL_REGISTRY_PATH env (read each call, not at import)."""
+    raw = os.environ.get("LOCAL_REGISTRY_PATH")
+    root = Path(raw) if raw else Path(PROJECT_ROOT) / "models" / "registry"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
