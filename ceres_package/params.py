@@ -83,6 +83,13 @@ DATA_CONFIG: dict[str, dict] = {
         'blob': 'SAA-prod-ble/Clean_Data/target_ble_tendre_hiver.csv',
         'local': ROOT / 'raw_data' / 'agrestesaa' / 'clean_wheat_prod.csv',
         },
+    'meteo_daily' :{
+        'blob': 'meteo_france_data/france/meteofrance_daily_full.csv',
+        'local': ROOT / 'raw_data' / 'meteofrance' / 'france' / 'meteofrance_daily_full.csv',
+        'read_options': {
+        'dtype': METEO_DTYPES,
+        'chunksize': None}
+        },
     'meteo_full': {
         'blob': 'meteo_france_data/france/meteofrance_full.csv',
         'local': ROOT / 'raw_data' / 'meteofrance' / 'france' / 'meteofrance_full.csv',
