@@ -1,26 +1,21 @@
 # NDVI module — team guide
 
-Function-based API in **`ceres_package.ndvi`** (install package, import functions).
+Function-based API in **`ceres_package.ndvi`**.
 
 ## Install
 
 ```bash
-pip install -r requirements-ndvi.txt
+pip install -r requirements.txt
 pip install -e .
 ```
 
 ## Data layout
 
 ```
-data/NDVI/
-├── README.md
-├── COLUMN_REFERENCE.md
-├── ndvi_monthly_by_department_polygon.csv
-├── ndvi_season_features.csv
-└── ML_BENCHMARK_SYNTHESIS.md
+data/NDVI/          # local export (CSVs gitignored; see .gitignore)
 ```
 
-**GCS:** `gs://ceres-ai-bucket/NDVI/`
+**GCS:** `gs://ceres-ai-bucket/NDVI/` — see **`GCP_NDVI_SYNC.md`**.
 
 Monthly key: **`DEPT_ID`** (not `department_code`).
 
@@ -63,13 +58,10 @@ from ceres_package.ndvi import (
 )
 
 monthly = load_ndvi_monthly()
-seasonal = load_ndvi_seasonal()  # adds dept_code alias for ML
+seasonal = load_ndvi_seasonal()
 
 # yield_df: columns dept_code, year, yield_t_ha, ...
 # panel = build_ndvi_yield_panel(seasonal, yield_df)
-
-# train_idx = panel.index[panel.year < 2020]
-# X = build_features("phenology_anomaly", panel, train_idx)
 ```
 
 ## Public functions
@@ -77,12 +69,8 @@ seasonal = load_ndvi_seasonal()  # adds dept_code alias for ML
 | Function | Role |
 |----------|------|
 | `export_ndvi_products` | Write both CSVs |
-| `read_monthly_source` | Slim columns from upstream file (`ceres_package.ndvi.monthly`) |
+| `read_monthly_source` | Slim columns from upstream file |
 | `build_seasonal_features` | Monthly → seasonal aggregation |
 | `load_ndvi_monthly` / `load_ndvi_seasonal` | Load Ceres products |
 | `build_ndvi_yield_panel` | Join NDVI + yield |
 | `list_pipelines` / `build_features` | Seasonal feature sets for ML |
-
-## GCP sync
-
-See `data/docs/GCP_NDVI_SYNC.md`.
