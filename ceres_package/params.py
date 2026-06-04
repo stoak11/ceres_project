@@ -80,7 +80,8 @@ DATA_CONFIG: dict[str, dict] = {
         'local': ROOT / 'raw_data' / 'meteofrance' / 'france' / 'meteofrance_full.csv',
         'read_options': {
         'dtype': METEO_DTYPES,
-        'chunksize': 50_000},
+        'chunksize': 50_000,
+        'low_memory': False},
         'agg_config': {
         'mean': [
             'temp_air_c', 'temp_min_c', 'temp_max_c', 'temp_rosee_c',

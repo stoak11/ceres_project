@@ -58,6 +58,11 @@ def load_from_gcp(source: DATA_SOURCE, dept: str | None = None) -> pd.DataFrame:
                 **{col: (col, 'mean') for col in agg_config.get('mean', []) if col in chunks[0].columns},
                 **{col: (col, 'sum')  for col in agg_config.get('sum',  []) if col in chunks[0].columns},
             ) if agg_config else pd.concat(chunks).groupby(['dept_id', 'day']).mean()
+            df = df.reset_index()  # ✅
+        else:
+            df = pd.read_csv(config['local'], **read_options)
+            if dtype:
+                df = df.astype({col: t for col, t in dtype.items() if col in df.columns})
 
     return df
 
