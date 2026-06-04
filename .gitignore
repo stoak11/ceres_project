@@ -129,13 +129,12 @@ dmypy.json
 # New files / folders
 .DS_Store
 
-# Project Dir
-raw_data/agrestesaa/*
-raw_data/meteofrance/*
-raw_data/nvdi/*
-raw_data/open_meteo/*
-raw_data/rgp/*
-raw_data/soil_grid/*
+# ML registry artifacts (local/GCS experiments — never commit runs)
+models/registry/
+
+# Local data (GCS ceres-ai-bucket is source of truth in production)
+raw_data/
+data/NDVI/*.csv
 *.csv
 **/*.csv
 

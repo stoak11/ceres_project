@@ -10,8 +10,16 @@ BUCKET_NAME = os.environ.get("BUCKET_NAME")
 
 
 ##################  CONSTANTS  #####################
-# LOCAL_DATA_PATH = os.path.join(os.path.expanduser('~'), ".lewagon", "mlops", "data")
-# LOCAL_REGISTRY_PATH =  os.path.join(os.path.expanduser('~'), ".lewagon", "mlops", "training_outputs")
+CERES_PKG_ROOT = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CERES_PKG_ROOT)
+
+# Model registry: local disk or GCS prefix (see ml_logic/registry.py)
+MODEL_TARGET = os.environ.get("MODEL_TARGET", "local")  # "local" | "gcs"
+LOCAL_REGISTRY_PATH = os.environ.get(
+    "LOCAL_REGISTRY_PATH",
+    os.path.join(PROJECT_ROOT, "models", "registry"),
+)
+GCS_MODEL_PREFIX = os.environ.get("GCS_MODEL_PREFIX", "models/registry")
 
 
 ##################  SOURCE  #####################
@@ -48,8 +56,9 @@ DATA_CONFIG: dict[str, dict] = {
     },
     'ndvi_month': {
         'blob': 'NDVI/ndvi_monthly_by_department_polygon.csv',
-        'local': ['raw_data', 'ndvi', 'ndvi_monthly.csv']}
-    }
+        'local': ['raw_data', 'ndvi', 'ndvi_monthly.csv'],
+    },
+}
 #################  Departements  ####################
 DEPARTEMENTS = {
             '01': 'Ain',

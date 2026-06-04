@@ -1,2 +1,12 @@
 google-cloud-storage
 openpyxl
+pytest
+pylint
+ipdb
+jupyterlab
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+joblib

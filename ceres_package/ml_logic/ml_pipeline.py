@@ -1,3 +1,9 @@
+"""
+LEGACY — notebook / exploration only (grid search, MinMaxScaler pipelines).
+
+Production path: model_specs.MODEL_CATALOG + train_and_register + registry.
+Do not import this module from packaged ingest or API code.
+"""
 import numpy as np
 import pandas as pd
 import pandas as pd
@@ -62,36 +68,40 @@ MODELS = {
     ),
 }
 
-# ── grid search per model ───────────────────────────────────────────────────
-CV = 5
-SCORING = "neg_root_mean_squared_error"  # regression (↑ better after neg)
+def run_grid_search_all_models(
+    X_train,
+    y_train,
+    *,
+    cv: int = 5,
+    scoring: str = "neg_root_mean_squared_error",
+) -> dict:
+    """
+    Legacy exploratory grid search (not persisted).
 
-results = {}
+    Prefer train_and_register() + registry for production paths.
+    """
+    from sklearn.model_selection import GridSearchCV
 
-for name, (pipe, param_grid) in MODELS.items():
-    search = GridSearchCV(
-        estimator=pipe,
-        param_grid=param_grid,
-        cv=CV,
-        scoring=SCORING,
-        n_jobs=-1,
-        refit=True,
-    )
-    search.fit(X_train, y_train)
-    results[name] = search
+    results = {}
+    for name, (pipe, param_grid) in MODELS.items():
+        search = GridSearchCV(
+            estimator=pipe,
+            param_grid=param_grid,
+            cv=cv,
+            scoring=scoring,
+            n_jobs=-1,
+            refit=True,
+        )
+        search.fit(X_train, y_train)
+        results[name] = search
+    return results
 
-# ── pick best model (lowest RMSE) ───────────────────────────────────────────
-best_name = min(
-    results,
-    key=lambda k: -results[k].best_score_,  # best_score_ is neg-RMSE
-)
-best_search = results[best_name]
-best_pipe = best_search.best_estimator_
 
-# predict / inspect
-# y_pred = best_pipe.predict(X_test)
-# best_search.best_params_
-# best_search.cv_results_
+def pick_best_from_grid(results: dict):
+    """Return (best_name, best_search, best_pipe) from run_grid_search_all_models."""
+    best_name = min(results, key=lambda k: -results[k].best_score_)
+    best_search = results[best_name]
+    return best_name, best_search, best_search.best_estimator_
 
 
 def randomized_grid_search(model, param_grid, X_train, y_train, n_iter=100, cv=5, scoring="neg_root_mean_squared_error"):
