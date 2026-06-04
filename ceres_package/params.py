@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from typing import Literal
 
 ##################  VARIABLES  ##################
 GCP_PROJECT = os.environ.get("GCP_PROJECT")
@@ -13,7 +14,42 @@ BUCKET_NAME = os.environ.get("BUCKET_NAME")
 # LOCAL_REGISTRY_PATH =  os.path.join(os.path.expanduser('~'), ".lewagon", "mlops", "training_outputs")
 
 
+##################  SOURCE  #####################
 
+DATA_SOURCE = Literal[
+    'production',
+    'meteo_full',
+    'meteo_dept',
+    'soil',
+    'ndvi_season',
+    'ndvi_month',
+]
+
+DATA_CONFIG: dict[str, dict] = {
+    'production': {
+        'blob': 'SAA-prod-ble/Clean_Data/target_ble_tendre_hiver.csv',
+        'local': ['raw_data', 'agrestesaa', 'clean_wheat_prod.csv'],
+    },
+    'meteo_full': {
+        'blob': 'meteo_france_data/france/meteofrance_full.csv',
+        'local': ['raw_data', 'meteofrance', 'france', 'meteofrance_full.csv'],
+    },
+    'meteo_dept': {
+        'blob': 'meteo_france_data/departements/dept_{dept}.csv',
+        'local': ['raw_data', 'meteofrance', 'france', 'dept_{dept}.csv'],
+    },
+    'soil': {
+        'blob': 'propriétés de sol/soilgrids.csv',
+        'local': ['raw_data', 'soil_grid', 'soil_grids.csv'],
+    },
+    'ndvi_season': {
+        'blob': 'NDVI/ndvi_season_features.csv',
+        'local': ['raw_data', 'ndvi', 'ndvi_season.csv'],
+    },
+    'ndvi_month': {
+        'blob': 'NDVI/ndvi_monthly_by_department_polygon.csv',
+        'local': ['raw_data', 'ndvi', 'ndvi_monthly.csv']}
+    }
 #################  Departements  ####################
 DEPARTEMENTS = {
             '01': 'Ain',

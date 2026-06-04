@@ -1,22 +1,39 @@
 from pathlib import Path
+from typing import Literal
 
 from google.cloud import storage
+
 import pandas as pd
-import matplotlib.pyplot as plt
 import re
 
 from ceres_package.params import *
 from ceres_package.utils import simple_time_and_memory_tracker
 
 
-def meteofull_from_gcp():
-    local_path = ['raw_data', 'meteofrance','france', 'meteofrance_full.csv']
-
-    download_blob(source_blob_name='meteo_france_data/france/meteofrance_full.csv', destination_file_name=local_path)
-
-    df = pd.read_excel(Path(*local_path), sheet_name='COP')
+from typing import Literal
+from pathlib import Path
 
 
+def load_from_gcp(source: DATA_SOURCE, dept: str | None = None) -> pd.DataFrame:
+    if source not in DATA_SOURCE:
+        raise ValueError(f"Source inconnue : '{source}'. Valeurs possibles : {list(DATA_SOURCE)}")
+
+    config = DATA_CONFIG[source].copy()
+
+    if source == 'meteo_dept':
+        if dept is None:
+            raise ValueError("L'argument 'dept' est requis pour la source 'meteo_dept'")
+        config['blob'] = config['blob'].format(dept=dept)
+        config['local'] = [s.format(dept=dept) for s in config['local']]
+
+    if source == 'meteo_dept':
+        download_blob(source_blob_name=config['blob'], destination_file_name=config['local'])
+        df = clean_meteo_data(Path(*config['local']))
+    else :
+        download_blob(source_blob_name=config['blob'], destination_file_name=config['local'])
+        df = pd.read_csv(Path(*config['local']))
+
+    return df
 
 @simple_time_and_memory_tracker
 def clean_meteo_data(file_path) -> pd.DataFrame:
