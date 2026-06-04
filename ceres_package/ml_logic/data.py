@@ -149,7 +149,7 @@ def download_blob(source_blob_name, destination_file_name):
 
         print(
             "Downloaded storage object {} from bucket {} to local file {}.".format(
-                source_blob_name, BUCKET_NAME, '/'.join(destination_file_name))
+                source_blob_name, BUCKET_NAME, destination_file_name)
             )
     else:
         print(
