@@ -15,8 +15,8 @@ from pathlib import Path
 
 
 def load_from_gcp(source: DATA_SOURCE, dept: str | None = None) -> pd.DataFrame:
-    if source not in DATA_SOURCE:
-        raise ValueError(f"Source inconnue : '{source}'. Valeurs possibles : {list(DATA_SOURCE)}")
+    if source not in DATA_CONFIG:
+        raise ValueError(f"Source inconnue : '{source}'. Valeurs possibles : {list(DATA_CONFIG)}")
 
     config = DATA_CONFIG[source].copy()
 
@@ -207,7 +207,7 @@ def clean_production_data():
 
     df["LIB_DEP"] = df["LIB_DEP"].str.slice(4)
 
-    df = df.rename(columns={"LIB_DEP": "REGION"})
+    df = df.rename(columns={"LIB_DEP": "DEPT"})
     df = df.rename(columns={"LIB_SAA": "TYPE BLE"})
 
     # ------------------------------------------------------------------
@@ -217,7 +217,7 @@ def clean_production_data():
     # Rendement
     df_rend = pd.melt(
         df,
-        id_vars=["DEPT_ID", "REGION", "TYPE BLE", "STATUT_QUALITE"],
+        id_vars=["DEPT_ID", "DEPT", "TYPE BLE", "STATUT_QUALITE"],
         value_vars=[col for col in df.columns if col.startswith("REND_")],
         var_name="ANNEE",
         value_name="RENDEMENT",
@@ -228,7 +228,7 @@ def clean_production_data():
     # Surface
     df_surf = pd.melt(
         df,
-        id_vars=["DEPT_ID", "REGION", "TYPE BLE", "STATUT_QUALITE"],
+        id_vars=["DEPT_ID", "DEPT", "TYPE BLE", "STATUT_QUALITE"],
         value_vars=[col for col in df.columns if col.startswith("SURF_")],
         var_name="ANNEE",
         value_name="SURFACE",
@@ -239,7 +239,7 @@ def clean_production_data():
     # Production
     df_prod = pd.melt(
         df,
-        id_vars=["DEPT_ID", "REGION", "TYPE BLE", "STATUT_QUALITE"],
+        id_vars=["DEPT_ID", "DEPT", "TYPE BLE", "STATUT_QUALITE"],
         value_vars=[col for col in df.columns if col.startswith("PROD_")],
         var_name="ANNEE",
         value_name="PRODUCTION",
@@ -255,7 +255,7 @@ def clean_production_data():
         df_prod,
         on=[
             "DEPT_ID",
-            "REGION",
+            "DEPT",
             "TYPE BLE",
             "STATUT_QUALITE",
             "ANNEE",
@@ -266,7 +266,7 @@ def clean_production_data():
         df_rend,
         on=[
             "DEPT_ID",
-            "REGION",
+            "DEPT",
             "TYPE BLE",
             "STATUT_QUALITE",
             "ANNEE",
