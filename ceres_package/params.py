@@ -125,11 +125,11 @@ DATA_CONFIG: dict[str, dict] = {
         },
     'ndvi_season': {
         'blob': 'NDVI/ndvi_season_features.csv',
-        'local': ROOT / 'raw_data' / 'ndvi' / 'ndvi_season.csv',
+        'local': ROOT / 'data' / 'NDVI' / 'ndvi_season_features.csv',
         },
     'ndvi_month': {
         'blob': 'NDVI/ndvi_monthly_by_department_polygon.csv',
-        'local': ROOT / 'raw_data' / 'ndvi' / 'ndvi_monthly.csv',
+        'local': ROOT / 'data' / 'NDVI' / 'ndvi_monthly_by_department_polygon.csv',
         },
     }
 #################  Departements  ####################
