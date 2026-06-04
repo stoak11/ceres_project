@@ -32,11 +32,31 @@ def load_from_gcp(source: DATA_SOURCE, dept: str | None = None) -> pd.DataFrame:
     else :
         download_blob(source_blob_name=config['blob'], destination_file_name=config['local'])
         read_options = config.get('read_options', {}).copy()
-
+        chunksize = read_options.pop('chunksize', None)
         dtype = read_options.pop('dtype', None)
-        df = pd.read_csv(config['local'], **read_options)
-        if dtype:
-            df = df.astype({col: t for col, t in dtype.items() if col in df.columns})
+
+        if chunksize:
+            agg_config = config.get('agg_config', None)
+            chunks = []
+            for chunk in pd.read_csv(config['local'], chunksize=chunksize, **read_options):
+                if dtype:
+                    chunk = chunk.astype({col: t for col, t in dtype.items() if col in chunk.columns})
+                chunk['datetime'] = pd.to_datetime(chunk['datetime'])
+                chunk['month'] = chunk['datetime'].dt.to_period('M')
+
+                if agg_config:
+                    agg = chunk.groupby(['dept_id', 'month']).agg(
+                        **{col: (col, 'mean') for col in agg_config.get('mean', []) if col in chunk.columns},
+                        **{col: (col, 'sum')  for col in agg_config.get('sum',  []) if col in chunk.columns})
+                else:
+                    agg = chunk.groupby(['dept_id', 'month']).mean(numeric_only=True)
+
+                chunks.append(agg)
+
+            df = pd.concat(chunks).groupby(['dept_id', 'month']).agg(
+                **{col: (col, 'mean') for col in agg_config.get('mean', []) if col in chunks[0].columns},
+                **{col: (col, 'sum')  for col in agg_config.get('sum',  []) if col in chunks[0].columns},
+            ) if agg_config else pd.concat(chunks).groupby(['dept_id', 'month']).mean()
 
     return df
 

@@ -73,7 +73,21 @@ DATA_CONFIG: dict[str, dict] = {
         'local': ROOT / 'raw_data' / 'meteofrance' / 'france' / 'meteofrance_full.csv',
         'read_options': {
         'dtype': METEO_DTYPES,
-        'parse_dates': ['datetime']}
+        'chunksize': 50_000},
+        'agg_config': {
+        'mean': [
+            'temp_air_c', 'temp_min_c', 'temp_max_c', 'temp_rosee_c',
+            'humidite_relative_pct', 'humidite_min_pct', 'humidite_max_pct',
+            'vent_moyen_10m_ms', 'rafale_max_ms', 'tension_vapeur_hpa',
+            'pression_mer_hpa', 'temp_sol_10cm_c', 'temp_sol_20cm_c',
+            'temp_sol_50cm_c', 'temp_sol_100cm_c', 'temp_surface_sol_c'
+            ],
+        'sum': [
+            'precipitations_1h_mm', 'duree_precipitations_min',
+            'duree_gel_min', 'insolation_min', 'rayonnement_global_jcm2',
+            'duree_humidite_inf40_min', 'duree_humidite_sup80_min'
+            ],
+            }
         },
     'meteo_dept': {
         'blob': 'meteo_france_data/departements/dept_{dept}.csv',
