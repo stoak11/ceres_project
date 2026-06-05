@@ -61,3 +61,49 @@ def preprocess_soil(df_soil):
     df_soil_preproc = df_soil.rename(columns={'dept_nom':'DEPT'})
 
     return df_soil_preproc
+
+
+def preprocess_meteo_annee(df_meteo):
+    """
+    Agrège les données météorologiques quotidiennes à l échelle annuelle et départementale.
+
+    La fonction :
+    - Harmonise les codes département (DEPT_ID au format 2 chiffres)
+    - Standardise les noms de colonnes
+    - Extrait l année depuis la colonne 'day'
+    - Agrège les variables météo selon les règles définies dans DATA_CONFIG
+      (moyenne ou somme selon les variables)
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame agrégé avec une ligne par DEPT_ID et ANNEE.
+    """
+
+    # Harmonisation des codes département (01, 02, ..., 95)
+    df_meteo["dept_id"] = df_meteo["dept_id"].astype(str).str.zfill(2)
+
+    # Standardisation du nom de colonne
+    df_meteo = df_meteo.rename(columns={"dept_id": "DEPT_ID"})
+
+    # Extraction de l'année depuis la date
+    df_meteo["ANNEE"] = df_meteo["day"].dt.year
+
+    # Récupération des règles d'agrégation
+    agg_config = DATA_CONFIG["meteo_full"]["agg_config"]
+    meteo_mean = agg_config["mean"]
+    meteo_sum = agg_config["sum"]
+
+    # Construction du dictionnaire d'agrégation pandas
+    agg_dict = {col: "mean" for col in meteo_mean}
+    agg_dict.update({col: "sum" for col in meteo_sum})
+
+    # Agrégation annuelle par département
+    df_meteo_agg = (
+        df_meteo
+        .groupby(["DEPT_ID", "ANNEE"])
+        .agg(agg_dict)
+        .reset_index()
+    )
+
+    return df_meteo_agg
