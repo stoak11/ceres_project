@@ -40,6 +40,7 @@ def load_from_gcp(source: DATA_SOURCE, dept: str | None = None) -> pd.DataFrame:
             chunks = []
             for chunk in pd.read_csv(config['local'], chunksize=chunksize, **read_options):
                 chunk = chunk[pd.to_numeric(chunk['altitude_m'], errors='coerce').notna()]
+                
                 if dtype:
                     chunk = chunk.astype({col: t for col, t in dtype.items() if col in chunk.columns})
                 chunk['datetime'] = pd.to_datetime(chunk['datetime'])

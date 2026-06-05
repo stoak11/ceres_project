@@ -133,7 +133,7 @@ dmypy.json
 models/registry/
 
 # Local data (GCS ceres-ai-bucket is source of truth in production)
-raw_data/
+raw_data/*
 data/NDVI/*.csv
 *.csv
 **/*.csv
