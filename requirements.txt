@@ -14,3 +14,6 @@ xgboost
 scipy
 PyYAML>=6.0
 pyarrow>=14
+fastapi
+uvicorn
+tensorflow>=2.16
