@@ -140,8 +140,6 @@ raw_data/nvdi/*
 raw_data/open_meteo/*
 raw_data/rpg/*
 raw_data/soil_grid/*
-data/NDVI/*.csv
-data/marts/
 *.csv
 **/*.csv
 

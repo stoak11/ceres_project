@@ -83,6 +83,13 @@ DATA_CONFIG: dict[str, dict] = {
         'blob': 'SAA-prod-ble/Clean_Data/target_ble_tendre_hiver.csv',
         'local': ROOT / 'raw_data' / 'agrestesaa' / 'clean_wheat_prod.csv',
         },
+    'meteo_hourly' :{
+        'blob': 'meteo_france_data/france/meteofrance_hourly_full.csv',
+        'local': ROOT / 'raw_data' / 'meteofrance' / 'france' / 'meteofrance_daily_full.csv',
+        'read_options': {
+        'dtype': METEO_DTYPES,
+        'chunksize': None}
+        },
     'meteo_daily' :{
         'blob': 'meteo_france_data/france/meteofrance_daily_full.csv',
         'local': ROOT / 'raw_data' / 'meteofrance' / 'france' / 'meteofrance_daily_full.csv',
@@ -125,11 +132,11 @@ DATA_CONFIG: dict[str, dict] = {
         },
     'ndvi_season': {
         'blob': 'NDVI/ndvi_season_features.csv',
-        'local': ROOT / 'data' / 'NDVI' / 'ndvi_season_features.csv',
+        'local': ROOT / 'raw_data' / 'ndvi' / 'ndvi_season_features.csv',
         },
     'ndvi_month': {
         'blob': 'NDVI/ndvi_monthly_by_department_polygon.csv',
-        'local': ROOT / 'data' / 'NDVI' / 'ndvi_monthly_by_department_polygon.csv',
+        'local': ROOT / 'raw_data' / 'ndvi' / 'ndvi_monthly_by_department_polygon.csv',
         },
     }
 #################  Departements  ####################
