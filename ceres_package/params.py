@@ -31,6 +31,7 @@ DATA_SOURCE = Literal[
     'production',
     'meteo_full',
     'meteo_dept',
+    'meteo_hourly',
     'soil',
     'ndvi_season',
     'ndvi_month',
@@ -85,7 +86,7 @@ DATA_CONFIG: dict[str, dict] = {
         },
     'meteo_hourly' :{
         'blob': 'meteo_france_data/france/meteofrance_hourly_full.csv',
-        'local': ROOT / 'raw_data' / 'meteofrance' / 'france' / 'meteofrance_daily_full.csv',
+        'local': ROOT / 'raw_data' / 'meteofrance' / 'france' / 'meteofrance_hourly_full.csv',
         'read_options': {
         'dtype': METEO_DTYPES,
         'chunksize': None}
