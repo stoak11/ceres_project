@@ -132,10 +132,17 @@ dmypy.json
 # ML registry artifacts (local/GCS experiments — never commit runs)
 models/registry/
 
-# Local data (GCS ceres-ai-bucket is source of truth in production)
-raw_data/*
-data/NDVI/*.csv
+# Local data caches (GCS is source of truth; keep directory skeleton in git)
+raw_data/agrestesaa/*
+raw_data/meteofrance/*
+raw_data/ndvi/*
+raw_data/nvdi/*
+raw_data/open_meteo/*
+raw_data/rpg/*
+raw_data/soil_grid/*
 *.csv
 **/*.csv
 
-!**/*.gitkeep
+!**/.gitkeep
+!raw_data/**/README.md
+!raw_data/**/meteoREADME.md
