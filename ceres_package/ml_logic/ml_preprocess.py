@@ -1,4 +1,5 @@
 import pandas as pd
+from ceres_package.params import *
 
 def create_clean_target(dftarget):
     dftarget_clean = dftarget.dropna(subset = ["RENDEMENT"])
