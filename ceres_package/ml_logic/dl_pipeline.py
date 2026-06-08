@@ -2,6 +2,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
+from ceres_package.ml_logic.registry import save_results, save_model
 from ceres_package.ml_logic.data import load_from_gcp
 from ceres_package.ml_logic.ml_preprocess import create_clean_target, merge_dataframes, merge_sol_y, preprocess_ndvi
 
@@ -314,6 +315,24 @@ def _main():
     print(f"\n✅ Résultats finaux :")
     print(f"   Test loss (MSE) : {test_loss:.4f}")
     print(f"   Test MAE        : {test_mae:.2f} q/ha")
+
+    # --- Sauvegarde ---
+    print("\n⏳ Sauvegarde des résultats et du modèle...")
+    save_results(
+        params={
+            'seq_len': 8760,
+            'hidden_dim': 64,
+            'batch_size': 32,
+            'epochs_run': len(history.history['loss']),
+        },
+        metrics={
+            'test_loss': float(test_loss),
+            'test_mae': float(test_mae),
+            'val_loss_min': float(min(history.history['val_loss'])),
+            'val_mae_min': float(min(history.history['val_mae'])),
+        }
+    )
+    save_model(model)
 
 
 if __name__ == "__main__":
