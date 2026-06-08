@@ -19,6 +19,38 @@ def get_crop_season(date: pd.Timestamp) -> str:
         return 'remplissage'
     raise ValueError(f"Date inattendue : {date}")
 
+########### PREPROC ML ###########
+
+def add_datetime_features_ml(df: pd.DataFrame) -> pd.DataFrame:
+    # Conversion to datetime
+    df['day'] = pd.to_datetime(df['day'])
+
+    # Vectorial Extraction
+    dt = df['day'].dt
+
+def add_harvest_year_ml(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df["harvest_year"] = df["day"].dt.year + (df["day"].dt.month >= 9).astype(int)
+    return df
+
+def fast_impute_ml(df, cols):
+
+    df = df.copy()
+
+    for col in cols:
+
+        # 1. médiane par département + année
+        df[col] = df[col].fillna(
+            df.groupby(['DEPT_ID', 'harvest_year'])[col].transform('median')
+        )
+
+        # 2. médiane par département
+        df[col] = df[col].fillna(
+            df.groupby('DEPT_ID')[col].transform('median')
+        )
+
+    return df
+
 ########### PREPROC DL ###########
 def add_datetime_features_dl(df: pd.DataFrame) -> pd.DataFrame:
     # Conversion to datetime
@@ -76,6 +108,3 @@ def time_cycle_dl(df: pd.DataFrame) -> pd.DataFrame:
     df.drop(columns=['heure', 'jour', 'mois', 'saison'], inplace=True)
 
     return df
-
-
-########### PREPROC ML ###########

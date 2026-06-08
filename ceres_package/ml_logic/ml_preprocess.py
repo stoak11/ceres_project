@@ -1,5 +1,7 @@
 import pandas as pd
 from ceres_package.params import *
+from ceres_package.ml_logic.meteo_preproc import add_datetime_features_ml, add_harvest_year_ml, fast_impute_ml, get_crop_season
+from ceres_package.ml_logic.data import load_from_gcp
 
 def create_clean_target(dftarget):
     dftarget_clean = dftarget.dropna(subset = ["RENDEMENT"])
@@ -20,7 +22,10 @@ def merge_dataframes(df1, df2):
 
     return merged_df
 
+def merge_dataframes_meteo (df1, df2):
+    merged_df = pd.merge(df1, df2, on=["DEPT_ID", "harvest_year"], how="inner")
 
+    return merged_df
 
 
 
@@ -63,6 +68,8 @@ def preprocess_soil(df_soil):
 
     return df_soil_preproc
 
+
+######## METEO ML ###########
 
 def preprocess_meteo_annee(df_meteo):
     """
@@ -108,3 +115,38 @@ def preprocess_meteo_annee(df_meteo):
     )
 
     return df_meteo_agg
+
+def preprocess_meteo_ml(df_meteo):
+
+    df_meteo = add_harvest_year_ml(df_meteo)
+
+        # datetime features UNE SEULE FOIS
+    df_meteo = add_datetime_features_ml(df_meteo)
+
+    # filtre
+    df_meteo = df_meteo[~df_meteo["DEPT_ID"].isin([92, 93, 94, 75])]
+
+    # drop features
+    df_meteo = df_meteo.drop(columns=[
+        'duree_humectation_foliaire_min',
+        'temp_sol_100cm_c',
+        'temp_sol_50cm_c',
+        'temp_sol_20cm_c',
+        'etat_sol',
+        'pression_mer_hpa',
+        'temp_surface_sol_c'
+    ])
+
+    # imputation
+    cols_valeurs = ['temp_air_c', 'temp_min_c', 'temp_max_c', 'temp_rosee_c',
+        'humidite_relative_pct', 'humidite_min_pct', 'humidite_max_pct',
+        'vent_moyen_10m_ms', 'rafale_max_ms', 'tension_vapeur_hpa',
+        'temp_sol_10cm_c', 'temp_min_sol_10cm_c', 'heure_humidite_min',
+        'heure_humidite_max', 'direction_vent_deg', 'hauteur_neige_sol_cm',
+        'precipitations_1h_mm', 'duree_precipitations_min', 'duree_gel_min',
+        'insolation_min', 'rayonnement_global_jcm2', 'duree_humidite_inf40_min',
+        'duree_humidite_sup80_min']
+
+    df_meteo = fast_impute_ml(df_meteo, cols_valeurs)
+
+    return df_meteo
