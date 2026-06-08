@@ -100,7 +100,7 @@ def time_cycle_dl(df: pd.DataFrame) -> pd.DataFrame:
         'semis': 0, 'vernalisation': 1, 'tallage': 2,
         'montaison': 3, 'floraison': 4, 'remplissage': 5,
     }
-    saison_num = df['saison'].map(saison_order)
+    saison_num = df['saison'].map(saison_order).astype('float32')
     df['saison_sin'] = np.sin(2 * np.pi * saison_num / 6).astype('float32')
     df['saison_cos'] = np.cos(2 * np.pi * saison_num / 6).astype('float32')
 
