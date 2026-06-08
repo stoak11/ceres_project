@@ -5,7 +5,7 @@ from xgboost import XGBRegressor
 
 from ceres_package.ml_logic.data import load_from_gcp
 from ceres_package.ml_logic.ml_pipeline import evaluate_and_predict, prepare_data, train_model
-from ceres_package.ml_logic.ml_preprocess import create_clean_target, merge_dataframes, merge_sol_y, preprocess_ndvi
+from ceres_package.ml_logic.ml_preprocess import create_clean_target, merge_dataframes, merge_sol_y, preprocess_ndvi, preprocess_meteo_annee
 
 """
 Legacy exploratory XGBoost script (pre-registry).
@@ -22,14 +22,17 @@ def _main() -> None:
     df_soil = load_from_gcp("soil")
     df_target = load_from_gcp("production")
     df_ndvi = load_from_gcp("ndvi_month")
+    df_meteo = load_from_gcp('meteo_daily')
 
     # --- Préprocessing ---
     df_target_clean = create_clean_target(df_target)
     df_ndvi_preprocessed = preprocess_ndvi(df_ndvi)
+    df_meteo_preprocessed = preprocess_meteo_annee(df_meteo)
 
     # --- Fusion des sources de données ---
     merged_df = merge_sol_y(df_target_clean, df_soil)
     merged_df = merge_dataframes(merged_df, df_ndvi_preprocessed)
+    merged_df = merge_dataframes(merged_df, df_meteo_preprocessed)
 
     # --- Entraînement ---
     X_train, X_test, y_train, y_test = prepare_data(merged_df)
