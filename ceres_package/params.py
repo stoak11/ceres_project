@@ -140,6 +140,7 @@ DATA_CONFIG: dict[str, dict] = {
         'local': ROOT / 'raw_data' / 'ndvi' / 'ndvi_monthly_by_department_polygon.csv',
         },
     }
+
 #################  Departements  ####################
 DEPARTEMENTS = {
             '01': 'Ain',
