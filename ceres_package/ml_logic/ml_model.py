@@ -41,7 +41,7 @@ def model_baseline():
 
     # --- Évaluation ---
     predictions = evaluate_and_predict(model, X_test, y_test)
-    print(predictions.head())
+    print(predictions[:5])
     print(
         "mae",  mean_absolute_error(y_test, predictions),
         "rmse", mean_squared_error(y_test, predictions),

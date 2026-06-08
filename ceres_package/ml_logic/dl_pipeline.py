@@ -5,60 +5,24 @@ from tensorflow.keras import layers
 from ceres_package.ml_logic.registry import save_results, save_model
 from ceres_package.ml_logic.data import load_from_gcp
 from ceres_package.ml_logic.ml_preprocess import create_clean_target, merge_dataframes, merge_sol_y, preprocess_ndvi
+from ceres_package.ml_logic.meteo_preproc import add_datetime_features_dl, add_harvest_year_dl,  time_cycle_dl
+from ceres_package.params import LOCAL_REGISTRY_PATH
 
+import os
+import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
-
-def get_crop_season(date: pd.Timestamp) -> str:
-    month, day = date.month, date.day
-
-    if month in (9, 10, 11):
-        return 'semis'
-    elif month == 12 or month in (1, 2):
-        return 'vernalisation'
-    elif month == 3 or (month == 4 and day <= 15):
-        return 'tallage'
-    elif (month == 4 and day > 15) or (month == 5 and day <= 15):
-        return 'montaison'
-    elif (month == 5 and day > 15) or (month == 6 and day <= 15):
-        return 'floraison'
-    elif (month == 6 and day > 15) or month in (7, 8):
-        return 'remplissage'
-    raise ValueError(f"Date inattendue : {date}")
-
-def add_datetime_features_dl(df: pd.DataFrame) -> pd.DataFrame:
-    # Conversion to datetime
-    df['datetime'] = pd.to_datetime(df['datetime'])
-
-    # Vectorial Extraction
-    dt = df['datetime'].dt
-    df['heure'] = dt.hour.astype('int8')
-    df['jour']  = dt.day.astype('int8')
-    df['mois']  = dt.month.astype('int8')
-    df['annee'] = dt.year.astype('int16')
-
-    # Saison agronomique — map sur les valeurs uniques pour éviter 13M appels
-    unique_dates = df['datetime'].drop_duplicates()
-    season_map = {ts: get_crop_season(ts) for ts in unique_dates}
-    df['saison'] = df['datetime'].map(season_map).astype('category')
-
-    # Encoding dept_id en 2 digits (01, 02, ..., 95)
-    df['DEPT_ID'] = df['dept_id'].astype(int).astype(str).str.zfill(2)
-    df = df.drop(columns='dept_id')
-
-    return df
 
 
 def general_dl_df():
 
     df_meteo = load_from_gcp("meteo_hourly")
     df_feat_meteo = add_datetime_features_dl(df_meteo)
+    df_feat_meteo = add_harvest_year_dl(df_feat_meteo)
     df_soil = load_from_gcp("soil")
     df_target = load_from_gcp("production")
     df_ndvi = load_from_gcp("ndvi_month")
-
 
     # --- Préprocessing ---
     df_target_clean = create_clean_target(df_target)
@@ -74,48 +38,55 @@ def general_dl_df():
     # Filtrer les deux DataFrames
     df_meteo_clean = df_feat_meteo[
         (~df_feat_meteo['DEPT_ID'].isin(DEPTS_EXCLUS)) &
-        (df_feat_meteo['annee'] <= 2024)
+        (df_feat_meteo['harvest_year'] <= 2024)
     ]
 
     df_merged_clean = df_merged[
         ~df_merged['DEPT_ID'].isin(DEPTS_EXCLUS)
     ]
 
-    # Vérifier ce qu'il reste
-    print(f"Paires deptxannée meteo : {df_meteo_clean.groupby(['DEPT_ID', 'annee']).ngroups}")
-    print(f"Paires deptxannée merged : {len(df_merged_clean)}")
+    # Exclure harvest_year 2010 (données incomplètes — météo démarre en jan 2010)
+    df_meteo_clean = df_meteo_clean[df_meteo_clean['harvest_year'] > 2010]
+    df_merged_clean = df_merged_clean[df_merged_clean['ANNEE'] > 2010]
 
+    # Vérifier ce qu'il reste
+    print(f"Paires dept x harvest_year meteo : {df_meteo_clean.groupby(['DEPT_ID', 'harvest_year']).ngroups}")
+    print(f"Paires dept x ANNEE merged : {len(df_merged_clean)}")
+
+    # Retirer la paire orpheline
     df_meteo_clean = df_meteo_clean[
-        ~((df_meteo_clean['DEPT_ID'] == '13') & (df_meteo_clean['annee'] == 2012))
+        ~((df_meteo_clean['DEPT_ID'] == '13') & (df_meteo_clean['harvest_year'] == 2012))
     ]
 
     # Vérification finale
-    print(f"Paires meteo : {df_meteo_clean.groupby(['DEPT_ID', 'annee']).ngroups}")
+    print(f"Paires meteo : {df_meteo_clean.groupby(['DEPT_ID', 'harvest_year']).ngroups}")
     print(f"Paires merged : {len(df_merged_clean)}")
 
     # Colonnes à supprimer
     COLS_TO_DROP = ['duree_humectation_foliaire_min', 'etat_sol']
-    df_meteo_clean = df_meteo_clean.drop(columns=COLS_TO_DROP)
+    df_meteo_clean = df_meteo_clean.drop(columns=COLS_TO_DROP, errors='ignore')
 
     # Colonnes à imputer
     cols_to_impute = [col for col in df_meteo_clean.columns
                     if df_meteo_clean[col].isnull().any()
-                    and col not in ['datetime', 'DEPT_ID', 'saison', 'annee', 'heure', 'jour', 'mois']]
+                    and col not in ['datetime', 'DEPT_ID', 'saison', 'annee', 'harvest_year', 'heure', 'jour', 'mois']]
 
     print(f"Colonnes à imputer : {len(cols_to_impute)}")
 
     # Imputation colonne par colonne pour éviter de charger toutes les colonnes en RAM
     for col in cols_to_impute:
-        # 1. Médiane par DEPT_ID × heure
-        df_meteo_clean[col] = df_meteo_clean.groupby(['DEPT_ID', 'heure'])[col].transform(
-            lambda x: x.fillna(x.median())
-        )
-        # 2. Fallback : médiane par DEPT_ID uniquement
-        df_meteo_clean[col] = df_meteo_clean.groupby('DEPT_ID')[col].transform(
-            lambda x: x.fillna(x.median())
-        )
-        # 3. Fallback final : médiane globale (cas extrême)
-        df_meteo_clean[col] = df_meteo_clean[col].fillna(df_meteo_clean[col].median())
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            # 1. Médiane par DEPT_ID × heure
+            df_meteo_clean[col] = df_meteo_clean.groupby(['DEPT_ID', 'heure'])[col].transform(
+                lambda x: x.fillna(x.median())
+            )
+            # 2. Fallback : médiane par DEPT_ID uniquement
+            df_meteo_clean[col] = df_meteo_clean.groupby('DEPT_ID')[col].transform(
+                lambda x: x.fillna(x.median())
+            )
+            # 3. Fallback final : médiane globale (cas extrême)
+            df_meteo_clean[col] = df_meteo_clean[col].fillna(df_meteo_clean[col].median())
         print(f"  ✓ {col}")
 
     # Vérification
@@ -123,9 +94,12 @@ def general_dl_df():
     print(remaining[remaining > 0])
     print("Done" if remaining.sum() == 0 else "Valeurs nulles restantes !")
 
+    # Encoding cyclique des variables temporelles
+    df_meteo_clean = time_cycle_dl(df_meteo_clean)
+
     # Colonnes features météo (on exclut les colonnes non-numériques et identifiants)
     METEO_FEATURES = [col for col in df_meteo_clean.columns if col not in
-                    ['datetime', 'DEPT_ID', 'annee', 'saison', 'heure', 'jour', 'mois']]
+                    ['datetime', 'DEPT_ID', 'annee', 'harvest_year']]
 
     # Colonnes features statiques (sol + NDVI, on exclut target et identifiants)
     STATIC_FEATURES = [col for col in df_merged_clean.columns if col not in
@@ -135,22 +109,21 @@ def general_dl_df():
     print(f"Features statiques : {len(STATIC_FEATURES)}")
 
     # Tri pour garantir l'ordre cohérent
-    df_meteo_clean = df_meteo_clean.sort_values(['DEPT_ID', 'annee', 'datetime'])
+    df_meteo_clean = df_meteo_clean.sort_values(['DEPT_ID', 'harvest_year', 'datetime'])
     df_merged_clean = df_merged_clean.sort_values(['DEPT_ID', 'ANNEE'])
 
     pairs = list(zip(df_merged_clean['DEPT_ID'], df_merged_clean['ANNEE']))
     pair_to_idx = {p: i for i, p in enumerate(pairs)}
 
-    # Hours per year :
     SEQ_LEN = 8760
 
     X_meteo  = np.zeros((len(pairs), SEQ_LEN, len(METEO_FEATURES)), dtype=np.float32)
     X_static = df_merged_clean[STATIC_FEATURES].values.astype(np.float32)
     y        = df_merged_clean['RENDEMENT'].values.astype(np.float32).reshape(-1, 1)
 
-    # Un seul groupby au lieu de 1349 filtres
-    for (dept, annee), group in df_meteo_clean.groupby(['DEPT_ID', 'annee'], sort=False):
-        idx = pair_to_idx.get((dept, annee))
+    # Un seul groupby au lieu de 1259 filtres
+    for (dept, harvest_year), group in df_meteo_clean.groupby(['DEPT_ID', 'harvest_year'], sort=False):
+        idx = pair_to_idx.get((dept, harvest_year))
         if idx is None:
             continue
         seq = group[METEO_FEATURES].values
@@ -165,12 +138,12 @@ def general_dl_df():
 
 def train_val_test_dl(X_meteo, X_static, y, pairs):
 
-    ANNEES = np.array([annee for _, annee in pairs])
+    HARVEST_YEARS = np.array([harvest_year for _, harvest_year in pairs])
 
     # Masks temporels
-    train_mask = ANNEES <= 2020
-    val_mask   = (ANNEES == 2021) | (ANNEES == 2022)
-    test_mask  = ANNEES >= 2023
+    train_mask = HARVEST_YEARS <= 2020
+    val_mask   = (HARVEST_YEARS == 2021) | (HARVEST_YEARS == 2022)
+    test_mask  = HARVEST_YEARS >= 2023
 
     # --- Météo : calcul mean/std sur le train uniquement ---
     meteo_mean = X_meteo[train_mask].mean(axis=(0, 1))
@@ -281,6 +254,21 @@ def fit_gru(model, X_meteo_train, X_meteo_val, X_static_train, X_static_val, y_t
 
 
 def _main():
+
+    # --- Vérification des dossiers de sauvegarde AVANT de lancer ---
+    for subdir in ['models', 'params', 'metrics']:
+        path = os.path.join(LOCAL_REGISTRY_PATH, subdir)
+        try:
+            os.makedirs(path, exist_ok=True)
+            # Test d'écriture
+            test_file = os.path.join(path, '.write_test')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+        except PermissionError:
+            raise PermissionError(f"❌ Pas de droits d'écriture sur {path} — vérifie LOCAL_REGISTRY_PATH dans ton .env avant de lancer l'entraînement")
+
+    print("✅ Dossiers de sauvegarde vérifiés\n")
 
     # --- Données ---
     print("⏳ Chargement et préparation des données...")
