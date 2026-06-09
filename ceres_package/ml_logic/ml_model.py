@@ -4,7 +4,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from xgboost import XGBRegressor
 
 from ceres_package.ml_logic.data import load_from_gcp
-from ceres_package.ml_logic.ml_pipeline import evaluate_and_predict, prepare_data, train_model
+from ceres_package.ml_logic.ml_pipeline import evaluate_and_predict, prepare_data, random_search_pipe
 from ceres_package.ml_logic.ml_preprocess import create_clean_target, merge_dataframes, merge_sol_y, preprocess_ndvi, preprocess_meteo_annee, preprocess_meteo_ml, merge_dataframes_meteo
 from ceres_package.ml_logic.ml_feature_eng import *
 from ceres_package.ml_logic.registry import save_model
@@ -77,7 +77,7 @@ def model_feature_eng():
 
     # --- Entraînement ---
     X_train, X_test, y_train, y_test = prepare_data(merged_df)
-    model = train_model(X_train, y_train)
+    model = random_search_pipe(X_train, y_train)
 
     # --- Évaluation ---
     predictions = evaluate_and_predict(model, X_test, y_test)
