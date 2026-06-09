@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
+from tensorflow.keras import layers, regularizers
 
 from ceres_package.ml_logic.registry import save_results, save_model
 from ceres_package.ml_logic.data import load_from_gcp
@@ -8,6 +8,7 @@ from ceres_package.ml_logic.ml_preprocess import create_clean_target, merge_data
 from ceres_package.ml_logic.meteo_preproc import add_datetime_features_dl, add_harvest_year_dl,  time_cycle_dl
 from ceres_package.params import LOCAL_REGISTRY_PATH
 
+import sys
 import os
 import warnings
 import numpy as np
@@ -179,18 +180,50 @@ def train_val_test_dl(X_meteo, X_static, y, pairs):
     return X_meteo_train, X_meteo_val, X_meteo_test, X_static_train, X_static_val, X_static_test, y_train, y_val, y_test
 
 
-def build_gru_two_branch_model(X_meteo_train, X_static_features, hidden_dim=64):
+def build_gru_two_branch_model(X_meteo_train, X_static_features, hidden_dim=32):
 
     # --- Branche météo (horaire) ---
-    meteo_input = keras.Input(shape = X_meteo_train.shape[1:], name='meteo_input')
-    x = layers.GRU(hidden_dim, return_sequences=True, name='gru_1')(meteo_input)
+    meteo_input = keras.Input(shape=X_meteo_train.shape[1:], name='meteo_input')
+    x = layers.GRU(hidden_dim, return_sequences=True, dropout=0.3, recurrent_dropout=0.2, name='gru_1')(meteo_input)
+    x = layers.BatchNormalization()(x)
+    x = layers.GRU(hidden_dim // 2, return_sequences=False, dropout=0.3, recurrent_dropout=0.2, name='gru_2')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.4)(x)
+    meteo_embedding = layers.Dense(32, activation='relu', kernel_regularizer=regularizers.l2(1e-4), name='meteo_embedding')(x)
+
+    # --- Branche statique (sol + NDVI) ---
+    static_input = keras.Input(shape=X_static_features.shape[1:], name='static_input')
+    s = layers.Dense(64, activation='relu', kernel_regularizer=regularizers.l2(1e-4))(static_input)
+    s = layers.BatchNormalization()(s)
+    s = layers.Dropout(0.4)(s)
+    static_embedding = layers.Dense(32, activation='relu', kernel_regularizer=regularizers.l2(1e-4), name='static_embedding')(s)
+
+    # --- Fusion ---
+    merged = layers.Concatenate()([meteo_embedding, static_embedding])
+    out = layers.Dense(32, activation='relu', kernel_regularizer=regularizers.l2(1e-4))(merged)
+    out = layers.BatchNormalization()(out)
+    out = layers.Dropout(0.4)(out)
+    output = layers.Dense(1, name='rendement')(out)
+
+    model = keras.Model(
+        inputs=[meteo_input, static_input],
+        outputs=output
+    )
+    return model
+
+
+def build_lstm_two_branch_model(X_meteo_train, X_static_features, hidden_dim=64):
+
+    # --- Branche météo (horaire) ---
+    meteo_input = keras.Input(shape=X_meteo_train.shape[1:], name='meteo_input')
+    x = layers.LSTM(hidden_dim, return_sequences=True, name='lstm_1')(meteo_input)
     x = layers.Dropout(0.2)(x)
-    x = layers.GRU(hidden_dim // 2, return_sequences=False, name='gru_2')(x)
+    x = layers.LSTM(hidden_dim // 2, return_sequences=False, name='lstm_2')(x)
     x = layers.Dropout(0.2)(x)
     meteo_embedding = layers.Dense(32, activation='relu', name='meteo_embedding')(x)
 
     # --- Branche statique (sol + NDVI) ---
-    static_input = keras.Input(shape = X_static_features.shape[1:], name='static_input')
+    static_input = keras.Input(shape=X_static_features.shape[1:], name='static_input')
     s = layers.Dense(64, activation='relu')(static_input)
     s = layers.Dropout(0.2)(s)
     static_embedding = layers.Dense(32, activation='relu', name='static_embedding')(s)
@@ -207,7 +240,6 @@ def build_gru_two_branch_model(X_meteo_train, X_static_features, hidden_dim=64):
     )
     return model
 
-
 def gru_compile(X_meteo_train, X_static_features):
 
     model = build_gru_two_branch_model(
@@ -223,6 +255,20 @@ def gru_compile(X_meteo_train, X_static_features):
     model.summary()
     return model
 
+def lstm_compile(X_meteo_train, X_static_features):
+
+    model = build_lstm_two_branch_model(
+        X_meteo_train, X_static_features
+    )
+
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+        loss='mse',
+        metrics=['mae']
+    )
+
+    model.summary()
+    return model
 
 def fit_gru(model, X_meteo_train, X_meteo_val, X_static_train, X_static_val, y_train, y_val):
 
@@ -252,15 +298,46 @@ def fit_gru(model, X_meteo_train, X_meteo_val, X_static_train, X_static_val, y_t
 
     return history
 
+def fit_lstm(model, X_meteo_train, X_meteo_val, X_static_train, X_static_val, y_train, y_val):
 
-def _main():
+    callbacks = [
+        keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=20,
+            restore_best_weights=True
+        ),
+        keras.callbacks.ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.5,
+            patience=5,
+            min_lr=1e-6
+        )
+    ]
+
+    history = model.fit(
+        [X_meteo_train, X_static_train],
+        y_train,
+        validation_data=([X_meteo_val, X_static_val], y_val),
+        epochs=1500,
+        batch_size=32,
+        callbacks=callbacks,
+        verbose=1
+    )
+
+    return history
+
+
+def _main(model_type: str = 'gru'):
+    """
+    model_type : 'gru' ou 'lstm'
+    """
+    assert model_type in ('gru', 'lstm'), "model_type doit être 'gru' ou 'lstm'"
 
     # --- Vérification des dossiers de sauvegarde AVANT de lancer ---
     for subdir in ['models', 'params', 'metrics']:
         path = os.path.join(LOCAL_REGISTRY_PATH, subdir)
         try:
             os.makedirs(path, exist_ok=True)
-            # Test d'écriture
             test_file = os.path.join(path, '.write_test')
             with open(test_file, 'w') as f:
                 f.write('test')
@@ -273,7 +350,7 @@ def _main():
     # --- Données ---
     print("⏳ Chargement et préparation des données...")
     X_meteo, X_static, y, pairs = general_dl_df()
-    print(f"✅ Données prêtes — {len(pairs)} paires dept×année\n")
+    print(f"✅ Données prêtes — {len(pairs)} paires dept x année\n")
 
     # --- Split & normalisation ---
     print("⏳ Normalisation et split train/val/test...")
@@ -283,18 +360,29 @@ def _main():
     print(f"✅ Split effectué\n")
 
     # --- Compilation ---
-    print("⏳ Construction et compilation du modèle...")
-    model = gru_compile(X_meteo_train, X_static_train)
+    print(f"⏳ Construction et compilation du modèle ({model_type.upper()})...")
+    if model_type == 'gru':
+        model = gru_compile(X_meteo_train, X_static_train)
+    else:
+        model = lstm_compile(X_meteo_train, X_static_train)
     print(f"✅ Modèle compilé\n")
 
     # --- Entraînement ---
     print("⏳ Entraînement du modèle...")
-    history = fit_gru(
-        model,
-        X_meteo_train, X_meteo_val,
-        X_static_train, X_static_val,
-        y_train, y_val
-    )
+    if model_type == 'gru':
+        history = fit_gru(
+            model,
+            X_meteo_train, X_meteo_val,
+            X_static_train, X_static_val,
+            y_train, y_val
+        )
+    else:
+        history = fit_lstm(
+            model,
+            X_meteo_train, X_meteo_val,
+            X_static_train, X_static_val,
+            y_train, y_val
+        )
     print(f"✅ Entraînement terminé — {len(history.history['loss'])} epochs\n")
 
     # --- Évaluation finale ---
@@ -308,6 +396,7 @@ def _main():
     print("\n⏳ Sauvegarde des résultats et du modèle...")
     save_results(
         params={
+            'model_type': model_type,
             'seq_len': 8760,
             'hidden_dim': 64,
             'batch_size': 32,
@@ -324,4 +413,5 @@ def _main():
 
 
 if __name__ == "__main__":
-    _main()
+    model_type = sys.argv[1] if len(sys.argv) > 1 else 'gru'
+    _main(model_type=model_type)
