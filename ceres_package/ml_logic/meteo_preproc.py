@@ -27,6 +27,21 @@ def add_datetime_features_ml(df: pd.DataFrame) -> pd.DataFrame:
 
     # Vectorial Extraction
     dt = df['day'].dt
+    df['heure'] = dt.hour.astype('int8')
+    df['jour']  = dt.day.astype('int8')
+    df['mois']  = dt.month.astype('int8')
+    df['annee'] = dt.year.astype('int16')
+
+    # Saison agronomique — map sur les valeurs uniques pour éviter 13M appels
+    unique_dates = df['day'].drop_duplicates()
+    season_map = {ts: get_crop_season(ts) for ts in unique_dates}
+    df['saison'] = df['day'].map(season_map).astype('category')
+
+    # Encoding dept_id en 2 digits (01, 02, ..., 95)
+    df['DEPT_ID'] = df['dept_id'].astype(int).astype(str).str.zfill(2)
+    df = df.drop(columns='dept_id')
+
+    return df
 
 def add_harvest_year_ml(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
