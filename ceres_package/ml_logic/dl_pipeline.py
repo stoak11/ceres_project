@@ -4,6 +4,7 @@ from tensorflow.keras import layers, regularizers
 
 from ceres_package.ml_logic.registry import save_results, save_model
 from ceres_package.ml_logic.data import load_from_gcp
+from ceres_package.ml_logic.dl_preprocess import build_engineered_features_mart_dl
 from ceres_package.ml_logic.ml_preprocess import create_clean_target, merge_dataframes, merge_sol_y, preprocess_ndvi
 from ceres_package.ml_logic.meteo_preproc import add_datetime_features_dl, add_harvest_year_dl,  time_cycle_dl
 from ceres_package.params import LOCAL_REGISTRY_PATH
@@ -14,6 +15,132 @@ import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+
+def general_dl_df_agro():
+    """
+    Pipeline DL avec features agronomiques calculées depuis meteo_hourly.
+    Branche météo : GRU sur 8760h × n_meteo_features
+    Branche statique : sol + NDVI + features agronomiques
+    """
+    df_meteo = load_from_gcp("meteo_hourly")
+    df_feat_meteo = add_datetime_features_dl(df_meteo)
+    df_feat_meteo = add_harvest_year_dl(df_feat_meteo)
+    df_soil = load_from_gcp("soil")
+    df_target = load_from_gcp("production")
+    df_ndvi = load_from_gcp("ndvi_month")
+
+    # --- Préprocessing ---
+    df_target_clean = create_clean_target(df_target)
+    df_ndvi_preprocessed = preprocess_ndvi(df_ndvi)
+
+    # --- Exclusions ---
+    DEPTS_EXCLUS = {'75', '92', '93', '94'}
+
+    # Filtrer avant de calculer les features agro
+    df_feat_meteo_filtered = df_feat_meteo[
+        (~df_feat_meteo['DEPT_ID'].isin(DEPTS_EXCLUS)) &
+        (df_feat_meteo['harvest_year'] > 2010) &
+        (df_feat_meteo['harvest_year'] <= 2024)
+    ]
+
+    # --- Features agronomiques depuis hourly ---
+    print("⏳ Calcul des features agronomiques...")
+    df_agro = build_engineered_features_mart_dl(df_feat_meteo_filtered, combo_id="all")
+    print(f"✅ Features agro : {df_agro.shape}")
+
+    # --- Fusion des sources statiques ---
+    df_merged = merge_sol_y(df_target_clean, df_soil)
+    df_merged = merge_dataframes(df_merged, df_ndvi_preprocessed)
+
+    df_meteo_clean = df_feat_meteo[
+        (~df_feat_meteo['DEPT_ID'].isin(DEPTS_EXCLUS)) &
+        (df_feat_meteo['harvest_year'] <= 2024)
+    ]
+    df_meteo_clean = df_meteo_clean[df_meteo_clean['harvest_year'] > 2010]
+    df_meteo_clean = df_meteo_clean[
+        ~((df_meteo_clean['DEPT_ID'] == '13') & (df_meteo_clean['harvest_year'] == 2012))
+    ]
+
+    df_merged_clean = df_merged[~df_merged['DEPT_ID'].isin(DEPTS_EXCLUS)]
+    df_merged_clean = df_merged_clean[df_merged_clean['ANNEE'] > 2010]
+
+    df_agro_clean = df_agro[
+        (~df_agro['DEPT_ID'].isin(DEPTS_EXCLUS)) &
+        (df_agro['harvest_year'] > 2010) &
+        (df_agro['harvest_year'] <= 2024)
+    ]
+    df_agro_clean = df_agro_clean[
+        ~((df_agro_clean['DEPT_ID'] == '13') & (df_agro_clean['harvest_year'] == 2012))
+    ]
+
+    # --- Vérifications ---
+    print(f"Paires dept x harvest_year meteo  : {df_meteo_clean.groupby(['DEPT_ID', 'harvest_year']).ngroups}")
+    print(f"Paires dept x ANNEE merged        : {len(df_merged_clean)}")
+    print(f"Paires dept x harvest_year agro   : {len(df_agro_clean)}")
+
+    # --- Imputation météo ---
+    df_meteo_clean = df_meteo_clean.drop(columns=['duree_humectation_foliaire_min', 'etat_sol'], errors='ignore')
+
+    cols_to_impute = [col for col in df_meteo_clean.columns
+                      if df_meteo_clean[col].isnull().any()
+                      and col not in ['datetime', 'DEPT_ID', 'saison', 'annee', 'harvest_year', 'heure', 'jour', 'mois']]
+
+    print(f"Colonnes à imputer : {len(cols_to_impute)}")
+    for col in cols_to_impute:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            df_meteo_clean[col] = df_meteo_clean.groupby(['DEPT_ID', 'heure'])[col].transform(lambda x: x.fillna(x.median()))
+            df_meteo_clean[col] = df_meteo_clean.groupby('DEPT_ID')[col].transform(lambda x: x.fillna(x.median()))
+            df_meteo_clean[col] = df_meteo_clean[col].fillna(df_meteo_clean[col].median())
+        print(f"  ✓ {col}")
+
+    # --- Cyclic encoding ---
+    df_meteo_clean = time_cycle_dl(df_meteo_clean)
+
+    # --- Merge static + agro ---
+    df_static_full = df_merged_clean.merge(
+        df_agro_clean,
+        left_on=['DEPT_ID', 'ANNEE'],
+        right_on=['DEPT_ID', 'harvest_year'],
+        how='inner'
+    ).drop(columns='harvest_year')
+
+    # --- Features ---
+    METEO_FEATURES = [col for col in df_meteo_clean.columns if col not in
+                      ['datetime', 'DEPT_ID', 'annee', 'harvest_year']]
+    STATIC_FEATURES = [col for col in df_merged_clean.columns if col not in
+                       ['DEPT_ID', 'DEPT_x', 'DEPT_y', 'ANNEE', 'RENDEMENT', 'STATUT_QUALITE']]
+    AGRO_FEATURES = [col for col in df_agro_clean.columns if col not in ['DEPT_ID', 'harvest_year']]
+    ALL_STATIC = STATIC_FEATURES + AGRO_FEATURES
+
+    print(f"Features météo : {len(METEO_FEATURES)} | statiques : {len(STATIC_FEATURES)} | agro : {len(AGRO_FEATURES)}")
+
+    # --- Tri ---
+    df_meteo_clean  = df_meteo_clean.sort_values(['DEPT_ID', 'harvest_year', 'datetime'])
+    df_static_full  = df_static_full.sort_values(['DEPT_ID', 'ANNEE'])
+
+    pairs       = list(zip(df_static_full['DEPT_ID'], df_static_full['ANNEE']))
+    pair_to_idx = {p: i for i, p in enumerate(pairs)}
+    SEQ_LEN     = 8760
+
+    X_meteo  = np.zeros((len(pairs), SEQ_LEN, len(METEO_FEATURES)), dtype=np.float32)
+    X_static = df_static_full[ALL_STATIC].values.astype(np.float32)
+    y        = df_static_full['RENDEMENT'].values.astype(np.float32).reshape(-1, 1)
+
+    for (dept, harvest_year), group in df_meteo_clean.groupby(['DEPT_ID', 'harvest_year'], sort=False):
+        idx = pair_to_idx.get((dept, harvest_year))
+        if idx is None:
+            continue
+        seq = group[METEO_FEATURES].values
+        n = min(len(seq), SEQ_LEN)
+        X_meteo[idx, :n, :] = seq[:n]
+
+    print(f"\nX_meteo  : {X_meteo.shape}")
+    print(f"X_static : {X_static.shape}")
+    print(f"y        : {y.shape}")
+
+    return X_meteo, X_static, y, pairs
 
 
 def general_dl_df():
@@ -329,9 +456,9 @@ def fit_lstm(model, X_meteo_train, X_meteo_val, X_static_train, X_static_val, y_
 
 def _main(model_type: str = 'gru'):
     """
-    model_type : 'gru' ou 'lstm'
+    model_type : 'gru' | 'gru_agro' | 'lstm'
     """
-    assert model_type in ('gru', 'lstm'), "model_type doit être 'gru' ou 'lstm'"
+    assert model_type in ('gru', 'gru_agro', 'lstm'), "model_type doit être 'gru', 'gru_agro' ou 'lstm'"
 
     # --- Vérification des dossiers de sauvegarde AVANT de lancer ---
     for subdir in ['models', 'params', 'metrics']:
@@ -349,7 +476,10 @@ def _main(model_type: str = 'gru'):
 
     # --- Données ---
     print("⏳ Chargement et préparation des données...")
-    X_meteo, X_static, y, pairs = general_dl_df()
+    if model_type == 'gru_agro':
+        X_meteo, X_static, y, pairs = general_dl_df_agro()
+    else:
+        X_meteo, X_static, y, pairs = general_dl_df()
     print(f"✅ Données prêtes — {len(pairs)} paires dept x année\n")
 
     # --- Split & normalisation ---
@@ -361,7 +491,7 @@ def _main(model_type: str = 'gru'):
 
     # --- Compilation ---
     print(f"⏳ Construction et compilation du modèle ({model_type.upper()})...")
-    if model_type == 'gru':
+    if model_type in ('gru', 'gru_agro'):
         model = gru_compile(X_meteo_train, X_static_train)
     else:
         model = lstm_compile(X_meteo_train, X_static_train)
@@ -369,7 +499,7 @@ def _main(model_type: str = 'gru'):
 
     # --- Entraînement ---
     print("⏳ Entraînement du modèle...")
-    if model_type == 'gru':
+    if model_type in ('gru', 'gru_agro'):
         history = fit_gru(
             model,
             X_meteo_train, X_meteo_val,
@@ -398,7 +528,7 @@ def _main(model_type: str = 'gru'):
         params={
             'model_type': model_type,
             'seq_len': 8760,
-            'hidden_dim': 64,
+            'hidden_dim': 32,
             'batch_size': 32,
             'epochs_run': len(history.history['loss']),
         },
