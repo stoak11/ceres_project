@@ -5,6 +5,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+from ceres_package.ml_logic.registry import save_model
 
 
 def train_test_split_data(merged_df):
@@ -27,7 +28,7 @@ def prepare_data(df, target_column="RENDEMENT", test_size=0.2, random_state=42):
     # 2. Séparation X et y (on retire la cible et les colonnes d'identifiants/temporelles)
     # Ajustez cette liste selon les noms exacts de vos colonnes à exclure du training
     columns_to_drop = [target_column, "REGION", "TYPE BLE", "SURFACE", "PRODUCTION", "dept_nom", "DEPT_x",
-                       "DEPT_y", "ANNEE", "DEPT_ID"]
+                       "DEPT_y", "ANNEE", "DEPT_ID", "harvest_year"]
     columns_to_drop = [col for col in columns_to_drop if col in df_clean.columns]
 
     X = df_clean.drop(columns=columns_to_drop)
@@ -42,7 +43,7 @@ def prepare_data(df, target_column="RENDEMENT", test_size=0.2, random_state=42):
     return X_train, X_test, y_train, y_test
 
 
-def train_model(X_train, y_train, param_grid=None, n_iter=50, cv=5, random_state=42):
+def random_search_pipe(X_train, y_train, param_grid=None, n_iter=50, cv=5, random_state=42):
     """
     Initialise le Pipeline (Scaler + XGBoost) et lance la recherche d'hyperparamètres.
     """
@@ -101,3 +102,19 @@ def evaluate_and_predict(model, X_test, y_test):
     print(f"---------------------")
 
     return predictions
+
+def scale_features(X_train, X_test):
+    MinMax = MinMaxScaler()
+    X_train_scaled = MinMax.fit_transform(X_train)
+    X_test_scaled = MinMax.transform(X_test)
+
+    return X_train_scaled, X_test_scaled
+
+def train_save(X_train_scaled, y_train):
+    XGB = XGBRegressor(learning_rate=0.2, max_depth=3, n_estimators=200, subsample=0.8)
+
+    model = XGB.fit(X_train_scaled, y_train)
+
+    model_final = save_model(model)
+
+    return model

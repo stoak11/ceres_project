@@ -7,6 +7,7 @@ from ceres_package.ml_logic.data import load_from_gcp
 from ceres_package.ml_logic.ml_pipeline import evaluate_and_predict, prepare_data, train_model
 from ceres_package.ml_logic.ml_preprocess import create_clean_target, merge_dataframes, merge_sol_y, preprocess_ndvi, preprocess_meteo_annee, preprocess_meteo_ml, merge_dataframes_meteo
 from ceres_package.ml_logic.ml_feature_eng import *
+from ceres_package.ml_logic.registry import save_model
 
 """
 Legacy exploratory XGBoost script (pre-registry).
@@ -48,6 +49,8 @@ def model_baseline():
         "r2",   r2_score(y_test, predictions)
         )
 
+    basic = save_model(model)
+
 
 def model_feature_eng():
     # --- Chargement des données brutes depuis GCP ---
@@ -85,6 +88,9 @@ def model_feature_eng():
         "r2",   r2_score(y_test, predictions)
         )
 
+    ML_featured = save_model(model)
+
+    return model, predictions, X_train, X_test, y_train, y_test, merged_df
 
 if __name__ == '__main__':
     model_feature_eng()
