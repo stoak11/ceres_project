@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
+from tensorflow.keras import layers, regularizers
 
 from ceres_package.ml_logic.registry import save_results, save_model
 from ceres_package.ml_logic.data import load_from_gcp
@@ -180,26 +180,29 @@ def train_val_test_dl(X_meteo, X_static, y, pairs):
     return X_meteo_train, X_meteo_val, X_meteo_test, X_static_train, X_static_val, X_static_test, y_train, y_val, y_test
 
 
-def build_gru_two_branch_model(X_meteo_train, X_static_features, hidden_dim=64):
+def build_gru_two_branch_model(X_meteo_train, X_static_features, hidden_dim=32):
 
     # --- Branche météo (horaire) ---
-    meteo_input = keras.Input(shape = X_meteo_train.shape[1:], name='meteo_input')
-    x = layers.GRU(hidden_dim, return_sequences=True, name='gru_1')(meteo_input)
-    x = layers.Dropout(0.2)(x)
-    x = layers.GRU(hidden_dim // 2, return_sequences=False, name='gru_2')(x)
-    x = layers.Dropout(0.2)(x)
-    meteo_embedding = layers.Dense(32, activation='relu', name='meteo_embedding')(x)
+    meteo_input = keras.Input(shape=X_meteo_train.shape[1:], name='meteo_input')
+    x = layers.GRU(hidden_dim, return_sequences=True, dropout=0.3, recurrent_dropout=0.2, name='gru_1')(meteo_input)
+    x = layers.BatchNormalization()(x)
+    x = layers.GRU(hidden_dim // 2, return_sequences=False, dropout=0.3, recurrent_dropout=0.2, name='gru_2')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.4)(x)
+    meteo_embedding = layers.Dense(32, activation='relu', kernel_regularizer=regularizers.l2(1e-4), name='meteo_embedding')(x)
 
     # --- Branche statique (sol + NDVI) ---
-    static_input = keras.Input(shape = X_static_features.shape[1:], name='static_input')
-    s = layers.Dense(64, activation='relu')(static_input)
-    s = layers.Dropout(0.2)(s)
-    static_embedding = layers.Dense(32, activation='relu', name='static_embedding')(s)
+    static_input = keras.Input(shape=X_static_features.shape[1:], name='static_input')
+    s = layers.Dense(64, activation='relu', kernel_regularizer=regularizers.l2(1e-4))(static_input)
+    s = layers.BatchNormalization()(s)
+    s = layers.Dropout(0.4)(s)
+    static_embedding = layers.Dense(32, activation='relu', kernel_regularizer=regularizers.l2(1e-4), name='static_embedding')(s)
 
     # --- Fusion ---
     merged = layers.Concatenate()([meteo_embedding, static_embedding])
-    out = layers.Dense(32, activation='relu')(merged)
-    out = layers.Dropout(0.2)(out)
+    out = layers.Dense(32, activation='relu', kernel_regularizer=regularizers.l2(1e-4))(merged)
+    out = layers.BatchNormalization()(out)
+    out = layers.Dropout(0.4)(out)
     output = layers.Dense(1, name='rendement')(out)
 
     model = keras.Model(
@@ -207,6 +210,7 @@ def build_gru_two_branch_model(X_meteo_train, X_static_features, hidden_dim=64):
         outputs=output
     )
     return model
+
 
 def build_lstm_two_branch_model(X_meteo_train, X_static_features, hidden_dim=64):
 
