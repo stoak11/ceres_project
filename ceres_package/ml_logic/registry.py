@@ -5,6 +5,8 @@ import glob
 from google.cloud import storage
 from colorama import Fore, Style
 from tensorflow import keras
+import joblib
+
 
 from ceres_package.params import LOCAL_REGISTRY_PATH, MODEL_TARGET, BUCKET_NAME
 
@@ -46,19 +48,27 @@ def save_results(params: dict, metrics: dict) -> None:
         print("✅ Results saved to GCS")
 
 
-def save_model(model: keras.Model = None) -> None:
+def save_model(model=None) -> None:
     """
     Sauvegarde le modèle localement dans :
-    "{LOCAL_REGISTRY_PATH}/models/{timestamp}.keras"
+    - Keras : "{LOCAL_REGISTRY_PATH}/models/{timestamp}.keras"
+    - ML (XGBoost, sklearn...) : "{LOCAL_REGISTRY_PATH}/models/{timestamp}.pkl"
     Si MODEL_TARGET='gcs', aussi dans le bucket GCS.
     """
+
     timestamp = time.strftime("%Y%m%d-%H%M%S")
 
-    # Sauvegarde locale
     models_dir = os.path.join(LOCAL_REGISTRY_PATH, "models")
     os.makedirs(models_dir, exist_ok=True)
-    model_path = os.path.join(models_dir, f"{timestamp}.keras")
-    model.save(model_path)
+
+    # Détection du type de modèle
+    if isinstance(model, keras.Model):
+        model_path = os.path.join(models_dir, f"{timestamp}.keras")
+        model.save(model_path)
+    else:
+        model_path = os.path.join(models_dir, f"{timestamp}.pkl")
+        joblib.dump(model, model_path)
+
     print("✅ Model saved locally")
 
     if MODEL_TARGET == "gcs":
@@ -72,26 +82,35 @@ def save_model(model: keras.Model = None) -> None:
     return None
 
 
-def load_model() -> keras.Model:
+
+def load_model():
     """
     Charge le modèle le plus récent :
     - depuis le disque local si MODEL_TARGET='local'
     - depuis GCS si MODEL_TARGET='gcs'
     Retourne None si aucun modèle trouvé.
+    Supporte les modèles Keras (.keras) et ML (.pkl).
     """
+
+    def _load_file(path):
+        if path.endswith(".keras"):
+            return keras.models.load_model(path)
+        else:
+            return joblib.load(path)
 
     if MODEL_TARGET == "local":
         print(Fore.BLUE + "\nChargement du dernier modèle local..." + Style.RESET_ALL)
 
         local_model_directory = os.path.join(LOCAL_REGISTRY_PATH, "models")
-        local_model_paths = glob.glob(f"{local_model_directory}/*.keras")
+        local_model_paths = glob.glob(f"{local_model_directory}/*.keras") + \
+                            glob.glob(f"{local_model_directory}/*.pkl")
 
         if not local_model_paths:
             print("❌ Aucun modèle trouvé en local")
             return None
 
         most_recent_model_path = sorted(local_model_paths)[-1]
-        latest_model = keras.models.load_model(most_recent_model_path)
+        latest_model = _load_file(most_recent_model_path)
         print("✅ Modèle chargé depuis le disque local")
         return latest_model
 
@@ -101,21 +120,20 @@ def load_model() -> keras.Model:
         try:
             client = storage.Client()
             blobs = list(client.get_bucket(BUCKET_NAME).list_blobs(prefix="models/"))
-            keras_blobs = [b for b in blobs if b.name.endswith(".keras")]
+            valid_blobs = [b for b in blobs if b.name.endswith(".keras") or b.name.endswith(".pkl")]
 
-            if not keras_blobs:
+            if not valid_blobs:
                 print(f"❌ Aucun modèle trouvé dans GCS bucket {BUCKET_NAME}")
                 return None
 
-            latest_blob = max(keras_blobs, key=lambda x: x.updated)
+            latest_blob = max(valid_blobs, key=lambda x: x.updated)
 
-            # Téléchargement local temporaire pour chargement
             local_model_directory = os.path.join(LOCAL_REGISTRY_PATH, "models")
             os.makedirs(local_model_directory, exist_ok=True)
             local_path = os.path.join(local_model_directory, os.path.basename(latest_blob.name))
             latest_blob.download_to_filename(local_path)
 
-            latest_model = keras.models.load_model(local_path)
+            latest_model = _load_file(local_path)
             print("✅ Modèle chargé depuis GCS")
             return latest_model
 
