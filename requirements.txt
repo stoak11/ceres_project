@@ -18,3 +18,9 @@
   uvicorn
   tensorflow>=2.16
   colorama
+  python-dotenv
+  httpx
+  pytest-asyncio
+  pytz
+  fsspec
+  gcsfs
