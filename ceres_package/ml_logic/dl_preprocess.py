@@ -60,7 +60,7 @@ def vernalisation_winter_temperature_anomaly_indicator_dl(df_meteo):
 
 def vegetatif_rain_extreme_indicator_dl(df_meteo):
     """
-    Cumul glissant sur 240h (10 jours × 24h) vs P90 historique par département.
+    Cumul glissant sur 240h (10 jours x 24h) vs P90 historique par département.
     """
     df_vegetatif = df_meteo[df_meteo['saison'] == 'tallage'].copy()
     df_vegetatif = df_vegetatif.sort_values(["DEPT_ID", "datetime"])

@@ -14,7 +14,7 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-X_TEST_GCS_PATH = "gs://ceres-ai-bucket/Démo/X_test_for_predict (1).csv"
+X_TEST_GCS_PATH = "gs://ceres-ai-bucket/demo/X_test_for_predict.csv"
 
 @app.on_event("startup")
 def load_reference_data():
