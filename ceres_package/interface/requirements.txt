@@ -1,8 +1,0 @@
-# API slice — install repo root requirements.txt for full ceres_package data stack.
-fastapi
-uvicorn
-google-cloud-storage
-pandas
-numpy
-scikit-learn
-xgboost

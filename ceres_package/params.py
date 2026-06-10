@@ -2,6 +2,9 @@ import os
 import numpy as np
 from typing import Literal
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 ##################  VARIABLES  ##################
 GCP_PROJECT = os.environ.get("GCP_PROJECT")
