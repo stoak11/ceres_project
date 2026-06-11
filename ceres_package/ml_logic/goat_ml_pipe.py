@@ -15,6 +15,7 @@ from ceres_package.ml_logic.ml_preprocess import (
 )
 from ceres_package.ml_logic.ml_feature_eng import build_engineered_features_mart
 from ceres_package.ml_logic.ml_pipeline import prepare_data
+from ceres_package.ml_logic.registry import save_model, save_results
 
 
 # ============================================================
@@ -251,6 +252,7 @@ def _main():
     print("⏳ Évaluation sur le test set...")
     predictions, mae, rmse, r2 = evaluate_and_predict(best_pipe, X_test_fe, y_test)
 
+
     # --- Prédictions 2025 ---
     print("\n⏳ Prédictions 2025...")
     X_2025 = df_2025.drop(columns=['RENDEMENT', 'DEPT_ID', 'harvest_year',
@@ -260,6 +262,7 @@ def _main():
 
     df_2025_out = df_2025[['DEPT_ID', 'harvest_year', 'RENDEMENT']].copy()
     df_2025_out['rendement_predit'] = preds_2025
+
 
     # Métriques sur 2025
     mask_notna = df_2025['RENDEMENT'].notna().values
@@ -275,6 +278,26 @@ def _main():
     print(f"   RMSE : {rmse_2025:.4f} q/ha")
     print(f"   R²   : {r2_2025:.4f}")
     print(df_2025_out.head(10))
+
+    # --- Sauvegarde ---
+    print("\n⏳ Sauvegarde des résultats et du modèle...")
+    save_results(
+        params={
+            'model_type': 'xgboost_optuna',
+            'n_trials': 200,
+            'n_features': X_train_fe.shape[1],
+        },
+        metrics={
+            'test_mae':   float(mae),
+            'test_rmse':  float(rmse),
+            'test_r2':    float(r2),
+            'mae_2025':   float(mae_2025),
+            'rmse_2025':  float(rmse_2025),
+            'r2_2025':    float(r2_2025),
+            'cv_mae_best': float(study.best_value),
+        }
+    )
+    save_model(best_pipe)
 
     return best_pipe, study, df_2025_out
 
